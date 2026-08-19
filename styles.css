@@ -260,3 +260,72 @@ button { font-family: inherit; }
 .history-item { cursor: pointer; }
 .history-item .date { font-weight: 600; }
 .history-item .summary { color: var(--text-dim); font-size: 0.92rem; margin-top: 2px; }
+
+/* Rest timer */
+.rest-timer {
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0;
+}
+
+/* Exercise notes */
+.ex-notes { margin: 6px 0 10px; }
+.note-text {
+  background: none; border: none;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  white-space: pre-wrap;
+}
+.note-add {
+  background: none; border: none;
+  color: var(--accent);
+  font-size: 0.9rem;
+  padding: 0;
+  cursor: pointer;
+}
+.notes-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  margin-bottom: 8px;
+  resize: vertical;
+}
+
+/* Planned exercises (from repeat workout) */
+.workout-ex.planned {
+  border-style: dashed;
+  cursor: pointer;
+}
+.workout-ex.planned .name { color: var(--text-dim); }
+
+/* Insights */
+.insight-title { font-weight: 600; margin-bottom: 2px; }
+.insight-sub { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 10px; }
+.insight-rows { margin: 4px 0; }
+.insight-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.insight-row:last-child { border-bottom: none; }
+.insight-row .k { text-transform: capitalize; }
+.insight-row .v { font-weight: 600; }
+.insight-note {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.insight-empty { color: var(--text-dim); font-size: 0.92rem; padding: 6px 0; }

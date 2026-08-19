@@ -2,8 +2,11 @@
 // see CLAUDE.md before changing stores or DB_VERSION.
 //
 // Stores:
-//   exercises: { id, name, muscles[], load ('weighted'|'unloaded'), increment, isCustom, createdAt }
-//   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes }
+//   exercises: { id, name, muscles[], load ('weighted'|'unloaded'|'hold'),
+//                increment, isCustom, createdAt, notes? }
+//   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes,
+//                plannedExerciseIds? (from "repeat workout"; logged sets are
+//                the source of truth — planned is just a to-do list) }
 //   sets:      { id, workoutId, exerciseId, reps|null, weight|null, rpe|null,
 //                durationSec|null, loggedAt }
 // weight null = no load / not measured (bands, bodyweight). Not the same as 0.
@@ -109,6 +112,12 @@ export async function addExercise({ name, muscles, load, increment }) {
   return exercise;
 }
 
+export async function updateExercise(exercise) {
+  const db = await openDb();
+  await tx(db, 'exercises', 'readwrite', (s) => s.put(exercise));
+  return exercise;
+}
+
 // --- workouts ---
 
 export function todayKey(d = new Date()) {
@@ -128,7 +137,7 @@ export async function getWorkoutByDate(date) {
   });
 }
 
-export async function startWorkout(date) {
+export async function startWorkout(date, plannedExerciseIds = []) {
   const db = await openDb();
   const workout = {
     id: crypto.randomUUID(),
@@ -136,7 +145,14 @@ export async function startWorkout(date) {
     startedAt: Date.now(),
     endedAt: null,
     notes: '',
+    plannedExerciseIds,
   };
+  await tx(db, 'workouts', 'readwrite', (s) => s.put(workout));
+  return workout;
+}
+
+export async function updateWorkout(workout) {
+  const db = await openDb();
   await tx(db, 'workouts', 'readwrite', (s) => s.put(workout));
   return workout;
 }
@@ -210,11 +226,37 @@ export async function recentExerciseIds(limit = 8) {
   return seen;
 }
 
-// --- export ---
+export function listSets() {
+  return getAll('sets');
+}
+
+// --- export / import ---
 
 export async function exportAll() {
   const [exercises, workouts, sets] = await Promise.all([
     getAll('exercises'), getAll('workouts'), getAll('sets'),
   ]);
   return { exportedAt: new Date().toISOString(), version: DB_VERSION, exercises, workouts, sets };
+}
+
+// Restore from an exportAll() JSON file. Merge semantics: records are matched
+// by id; imported records overwrite same-id records, everything else is kept.
+// Never deletes anything.
+export async function importAll(data) {
+  const db = await openDb();
+  const counts = { exercises: 0, workouts: 0, sets: 0 };
+  for (const store of ['exercises', 'workouts', 'sets']) {
+    const items = Array.isArray(data[store]) ? data[store] : [];
+    if (items.length === 0) continue;
+    await tx(db, store, 'readwrite', (s) => {
+      for (const item of items) {
+        if (item && typeof item.id === 'string') {
+          s.put(item);
+          counts[store]++;
+        }
+      }
+      return s.count();
+    });
+  }
+  return counts;
 }

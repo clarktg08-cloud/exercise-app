@@ -1,19 +1,21 @@
 import {
-  initDb, listExercises, addExercise,
-  todayKey, getWorkoutByDate, startWorkout, listWorkouts,
+  initDb, listExercises, addExercise, updateExercise,
+  todayKey, getWorkoutByDate, startWorkout, updateWorkout, listWorkouts,
   logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
-  recentExerciseIds, exportAll,
+  recentExerciseIds, listSets, exportAll, importAll,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
 import { APP_VERSION } from './version.js';
+import { weekStart, weeklySetsPerMuscle, e1rmHistory } from './insights.js';
 
 const view = document.getElementById('view');
 const headerTitle = document.getElementById('header-title');
 const headerDate = document.getElementById('header-date');
 
 const state = {
-  tab: 'today',            // 'today' | 'history'
-  screen: 'today',         // 'today' | 'picker' | 'log' | 'create' | 'history' | 'workout-detail'
+  tab: 'today',            // 'today' | 'insights' | 'history'
+  screen: 'today',         // 'today' | 'picker' | 'log' | 'create' | 'insights'
+                           //   | 'history' | 'workout-detail' | 'edit-set'
   workout: null,           // today's workout, if started
   exercise: null,          // exercise being logged
   detailWorkout: null,     // workout opened from history
@@ -88,7 +90,10 @@ async function renderToday() {
   addBtn.onclick = () => { state.screen = 'picker'; state.search = ''; render(); };
   view.append(addBtn);
 
-  if (grouped.length === 0) {
+  const plannedIds = (state.workout.plannedExerciseIds ?? [])
+    .filter((id) => byId[id] && !grouped.some((g) => g.exerciseId === id));
+
+  if (grouped.length === 0 && plannedIds.length === 0) {
     view.append(el(`<div class="empty"><p>Workout started — add your first exercise.</p></div>`));
   }
 
@@ -105,6 +110,21 @@ async function renderToday() {
     card.style.cursor = 'pointer';
     card.onclick = () => { if (ex) openLog(ex); };
     view.append(card);
+  }
+
+  if (plannedIds.length > 0) {
+    view.append(el(`<div class="section-label">Planned — tap to log</div>`));
+    for (const id of plannedIds) {
+      const ex = byId[id];
+      const card = el(`
+        <div class="card workout-ex planned">
+          <div class="name"></div>
+          <div class="sets">No sets yet</div>
+        </div>`);
+      card.querySelector('.name').textContent = ex.name;
+      card.onclick = () => openLog(ex);
+      view.append(card);
+    }
   }
 }
 
@@ -280,6 +300,16 @@ async function renderLog() {
     : 'First time logging this exercise.';
   view.append(lastLine);
 
+  // Optional form notes on the exercise (e.g. "wrap strap under arms, rotate away")
+  const notesWrap = el(`<div class="ex-notes"></div>`);
+  view.append(notesWrap);
+  renderExerciseNotes(notesWrap, ex);
+
+  // Rest timer: time since the last set logged anywhere in today's workout
+  const restEl = el(`<div class="rest-timer" hidden></div>`);
+  view.append(restEl);
+  await updateRestTimer(restEl);
+
   const card = el(`<div class="card"></div>`);
   const isHold = ex.load === 'hold';
 
@@ -321,6 +351,7 @@ async function renderLog() {
       durationSec: isHold ? state.durationSec : null,
     });
     await renderLoggedSets(setList);
+    await updateRestTimer(restEl);
   };
   card.append(logBtn);
   view.append(card);
@@ -328,6 +359,59 @@ async function renderLog() {
   const setList = el(`<div class="set-list card"></div>`);
   view.append(setList);
   await renderLoggedSets(setList);
+}
+
+// Time since the most recent set in today's workout, ticking every second.
+let restTicker = null;
+
+async function updateRestTimer(restEl) {
+  clearInterval(restTicker);
+  const sets = await setsForWorkout(state.workout.id);
+  if (sets.length === 0) { restEl.hidden = true; return; }
+  const lastAt = Math.max(...sets.map((s) => s.loggedAt));
+  const tick = () => {
+    const secs = Math.max(0, Math.floor((Date.now() - lastAt) / 1000));
+    const m = Math.floor(secs / 60);
+    const s = String(secs % 60).padStart(2, '0');
+    restEl.textContent = `Rest: ${m}:${s}`;
+  };
+  tick();
+  restEl.hidden = false;
+  restTicker = setInterval(tick, 1000);
+}
+
+// Notes block on the log screen: view / edit / add.
+function renderExerciseNotes(wrap, ex) {
+  wrap.innerHTML = '';
+  const notes = ex.notes ?? '';
+
+  const startEditing = () => {
+    wrap.innerHTML = '';
+    const ta = el(`<textarea class="notes-input" rows="3" placeholder="Form cues, setup, how it should feel…"></textarea>`);
+    ta.value = notes;
+    const save = el(`<button class="btn small">Save note</button>`);
+    save.onclick = async () => {
+      const updated = await updateExercise({ ...ex, notes: ta.value.trim() });
+      state.exercise = updated;
+      renderExerciseNotes(wrap, updated);
+    };
+    const cancel = el(`<button class="btn small secondary" style="margin-left:6px">Cancel</button>`);
+    cancel.onclick = () => renderExerciseNotes(wrap, ex);
+    wrap.append(ta, save, cancel);
+    ta.focus();
+  };
+
+  if (notes) {
+    const noteEl = el(`<button class="note-text"></button>`);
+    noteEl.textContent = `📝 ${notes}`;
+    noteEl.title = 'Tap to edit note';
+    noteEl.onclick = startEditing;
+    wrap.append(noteEl);
+  } else {
+    const addBtn = el(`<button class="note-add">+ Add form note</button>`);
+    addBtn.onclick = startEditing;
+    wrap.append(addBtn);
+  }
 }
 
 // RPE chips (optional) — full 1–10 scale, toggling state.rpe
@@ -470,6 +554,106 @@ async function renderEditSet() {
   view.append(card);
 }
 
+// ---------- Insights (the science layer's UI) ----------
+
+async function renderInsights() {
+  headerTitle.textContent = 'Insights';
+  headerDate.textContent = '';
+  view.innerHTML = '';
+
+  const [sets, workouts, exercises] = await Promise.all([
+    listSets(), listWorkouts(), listExercises(),
+  ]);
+  const workoutsById = Object.fromEntries(workouts.map((w) => [w.id, w]));
+  const exercisesById = Object.fromEntries(exercises.map((e) => [e.id, e]));
+
+  if (sets.length === 0) {
+    view.append(el(`<div class="empty"><p>Log some workouts and the numbers show up here.</p></div>`));
+    return;
+  }
+
+  // --- This week ---
+  const monday = weekStart();
+  const weekCounts = weeklySetsPerMuscle(sets, workoutsById, exercisesById, monday);
+  const weekLabel = monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+  const weekCard = el(`
+    <div class="card">
+      <div class="insight-title">Training sets per muscle group this week</div>
+      <div class="insight-sub">Week of ${weekLabel}. Each set counts toward every muscle its
+        exercise is tagged with. Stretches and timed holds aren't counted — the research
+        below is about resistance-training sets.</div>
+      <div class="insight-rows"></div>
+      <div class="insight-note">Research on muscle growth most consistently supports
+        ~10–20 hard sets per muscle per week; strength can progress on less.</div>
+    </div>`);
+  const rows = weekCard.querySelector('.insight-rows');
+  const entries = Object.entries(weekCounts).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    rows.append(el(`<div class="insight-empty">No sets logged this week yet.</div>`));
+  } else {
+    for (const [muscle, count] of entries) {
+      const row = el(`
+        <div class="insight-row">
+          <span class="k"></span><span class="v"></span>
+        </div>`);
+      row.querySelector('.k').textContent = muscle;
+      row.querySelector('.v').textContent = `${count} ${count === 1 ? 'set' : 'sets'}`;
+      rows.append(row);
+    }
+  }
+  view.append(weekCard);
+
+  // --- Strength trends (est. 1RM) ---
+  const history = e1rmHistory(sets, workoutsById);
+  const trendCard = el(`
+    <div class="card">
+      <div class="insight-title">Strength trend (estimated 1RM)</div>
+      <div class="insight-sub">Best set per workout, Epley formula: weight × (1 + reps/30).
+        Only computed for loaded sets of 1–10 reps — bands and holds are tracked by RPE and time instead.</div>
+      <div class="insight-rows"></div>
+    </div>`);
+  const trendRows = trendCard.querySelector('.insight-rows');
+  const trendEntries = Object.entries(history)
+    .map(([exerciseId, points]) => ({ ex: exercisesById[exerciseId], points }))
+    .filter((t) => t.ex)
+    .sort((a, b) => b.points[b.points.length - 1].e1rm - a.points[a.points.length - 1].e1rm);
+
+  if (trendEntries.length === 0) {
+    trendRows.append(el(`<div class="insight-empty">No loaded sets of 1–10 reps yet — log some weighted work to see strength estimates.</div>`));
+  } else {
+    for (const { ex, points } of trendEntries) {
+      const latest = points[points.length - 1];
+      const prev = points.length > 1 ? points[points.length - 2] : null;
+      const row = el(`
+        <div class="insight-row">
+          <span class="k"></span><span class="v"></span>
+        </div>`);
+      row.querySelector('.k').textContent = ex.name;
+      let delta = '';
+      if (prev) {
+        const diff = latest.e1rm - prev.e1rm;
+        delta = diff === 0 ? '  (no change)' :
+          diff > 0 ? `  (▲ +${diff})` : `  (▼ ${diff})`;
+      }
+      row.querySelector('.v').textContent = `~${latest.e1rm} lb${delta}`;
+      trendRows.append(row);
+    }
+  }
+  view.append(trendCard);
+
+  // --- Totals ---
+  const totalCard = el(`
+    <div class="card">
+      <div class="insight-title">All time</div>
+      <div class="insight-rows">
+        <div class="insight-row"><span class="k">Workouts</span><span class="v">${workouts.length}</span></div>
+        <div class="insight-row"><span class="k">Sets logged</span><span class="v">${sets.length}</span></div>
+      </div>
+    </div>`);
+  view.append(totalCard);
+}
+
 // ---------- History ----------
 
 async function renderHistory() {
@@ -477,7 +661,9 @@ async function renderHistory() {
   headerDate.textContent = `v${APP_VERSION}`;
   view.innerHTML = '';
 
-  const exportBtn = el(`<button class="btn secondary" style="margin:12px 0">Export all data (JSON)</button>`);
+  const dataRow = el(`<div class="top-actions"></div>`);
+
+  const exportBtn = el(`<button class="btn secondary">Export (JSON)</button>`);
   exportBtn.onclick = async () => {
     const data = await exportAll();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -487,7 +673,35 @@ async function renderHistory() {
     a.click();
     URL.revokeObjectURL(a.href);
   };
-  view.append(exportBtn);
+  dataRow.append(exportBtn);
+
+  const fileInput = el(`<input type="file" accept=".json,application/json" hidden>`);
+  const importBtn = el(`<button class="btn secondary">Import (JSON)</button>`);
+  importBtn.onclick = () => fileInput.click();
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const n = (k) => (Array.isArray(data[k]) ? data[k].length : 0);
+      const total = n('exercises') + n('workouts') + n('sets');
+      if (total === 0) { alert('No app data found in that file.'); return; }
+      const ok = confirm(
+        `Import ${n('exercises')} exercises, ${n('workouts')} workouts, ` +
+        `${n('sets')} sets?\n\nExisting records with matching IDs are ` +
+        `overwritten; nothing is deleted.`);
+      if (!ok) return;
+      const counts = await importAll(data);
+      alert(`Imported ${counts.exercises} exercises, ${counts.workouts} workouts, ${counts.sets} sets.`);
+      render();
+    } catch {
+      alert('Could not read that file as an export JSON.');
+    } finally {
+      fileInput.value = '';
+    }
+  };
+  dataRow.append(importBtn, fileInput);
+  view.append(dataRow);
 
   const workouts = await listWorkouts();
   if (workouts.length === 0) {
@@ -529,6 +743,23 @@ async function renderWorkoutDetail() {
   const exercises = await listExercises();
   const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
 
+  if (w.date !== todayKey() && sets.length > 0) {
+    const repeatBtn = el(`<button class="btn" style="margin:10px 0">Repeat this workout today</button>`);
+    repeatBtn.onclick = async () => {
+      const ids = [...new Set(sets.map((s) => s.exerciseId))].filter((id) => byId[id]);
+      let today = await getWorkoutByDate(todayKey());
+      if (!today) {
+        today = await startWorkout(todayKey(), ids);
+      } else {
+        today.plannedExerciseIds =
+          [...new Set([...(today.plannedExerciseIds ?? []), ...ids])];
+        await updateWorkout(today);
+      }
+      switchTab('today');
+    };
+    view.append(repeatBtn);
+  }
+
   const grouped = [];
   for (const s of sets) {
     let g = grouped.find((x) => x.exerciseId === s.exerciseId);
@@ -565,6 +796,7 @@ async function renderWorkoutDetail() {
 // ---------- Shell ----------
 
 function render() {
+  clearInterval(restTicker);
   if (state.screen === 'edit-set') return renderEditSet();
   if (state.tab === 'today') {
     if (state.screen === 'picker') return renderPicker();
@@ -573,18 +805,25 @@ function render() {
     state.screen = 'today';
     return renderToday();
   }
+  if (state.tab === 'insights') {
+    state.screen = 'insights';
+    return renderInsights();
+  }
   if (state.screen === 'workout-detail') return renderWorkoutDetail();
   state.screen = 'history';
   return renderHistory();
 }
 
+function switchTab(name) {
+  state.tab = name;
+  state.screen = name === 'today' ? 'today' : name;
+  document.querySelectorAll('.tab').forEach((t) =>
+    t.classList.toggle('active', t.dataset.tab === name));
+  render();
+}
+
 document.querySelectorAll('.tab').forEach((tab) => {
-  tab.onclick = () => {
-    state.tab = tab.dataset.tab;
-    state.screen = state.tab === 'today' ? 'today' : 'history';
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-    render();
-  };
+  tab.onclick = () => switchTab(tab.dataset.tab);
 });
 
 initDb().then(render);
