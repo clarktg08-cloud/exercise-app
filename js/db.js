@@ -75,15 +75,16 @@ export async function initDb() {
           name: e.name,
           muscles: e.muscles,
           load: e.load,
-          increment: e.increment ?? 5,
+          increment: e.increment ?? 2.5,
           isCustom: false,
           createdAt: now,
         });
       } else if (!cur.isCustom &&
                  (cur.load !== e.load ||
-                  cur.muscles.join() !== e.muscles.join())) {
+                  cur.muscles.join() !== e.muscles.join() ||
+                  cur.increment !== (e.increment ?? 2.5))) {
         store.put({ ...cur, load: e.load, muscles: e.muscles,
-                    increment: e.increment ?? cur.increment });
+                    increment: e.increment ?? 2.5 });
       }
     }
     return store.count();
@@ -104,7 +105,7 @@ export async function addExercise({ name, muscles, load, increment }) {
     name,
     muscles,
     load,
-    increment: increment ?? 5,
+    increment: increment ?? 2.5,
     isCustom: true,
     createdAt: Date.now(),
   };

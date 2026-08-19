@@ -175,6 +175,21 @@ button { font-family: inherit; }
   font-weight: 600;
 }
 .stepper .value small { font-size: 0.8rem; color: var(--text-dim); font-weight: 400; }
+.stepper .value.typable { cursor: pointer; border-bottom: 1px dashed var(--border); }
+.value-input {
+  width: 84px;
+  font-size: 1.45rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: center;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 2px 4px;
+}
+.value-input::-webkit-outer-spin-button,
+.value-input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
 .rpe-row { margin: 14px 0; }
 .rpe-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

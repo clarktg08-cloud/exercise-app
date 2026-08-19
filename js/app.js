@@ -260,7 +260,6 @@ function renderCreate() {
       name: trimmed,
       muscles: [...state.createMuscles],
       load: state.createLoad,
-      increment: 5,
     });
     openLog(ex);
   };
@@ -317,15 +316,15 @@ async function renderLog() {
     // Stretches / planks: duration instead of reps × weight
     card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
       state.durationSec = Math.max(5, state.durationSec + dir * 15);
-    }));
+    }, durationDirect()));
   } else {
     // Reps stepper
     card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
       state.reps = Math.max(1, state.reps + dir);
-    }));
+    }, repsDirect()));
 
     // Weight stepper (null = no load, shown as "—")
-    const inc = ex.increment ?? 5;
+    const inc = ex.increment ?? 2.5;
     card.append(stepperRow('Weight', () => {
       return state.weight === null ? '—' : `${state.weight}<small> lb</small>`;
     }, (dir) => {
@@ -335,7 +334,7 @@ async function renderLog() {
         const next = state.weight + dir * inc;
         state.weight = next < 0 ? null : next;
       }
-    }));
+    }, weightDirect()));
   }
 
   card.append(rpeChipRow());
@@ -414,6 +413,36 @@ function renderExerciseNotes(wrap, ex) {
   }
 }
 
+// Tap-to-type handlers for the three stepper kinds. Invalid input keeps the
+// old value; an empty weight means "no load" (null), never 0.
+function repsDirect() {
+  return {
+    get: () => state.reps,
+    set: (v) => {
+      if (v !== null && Number.isFinite(v) && v >= 1) state.reps = Math.round(v);
+    },
+  };
+}
+
+function weightDirect() {
+  return {
+    get: () => state.weight,
+    set: (v) => {
+      if (v === null) { state.weight = null; return; }
+      if (Number.isFinite(v) && v >= 0) state.weight = v;
+    },
+  };
+}
+
+function durationDirect() {
+  return {
+    get: () => state.durationSec,
+    set: (v) => {
+      if (v !== null && Number.isFinite(v) && v >= 5) state.durationSec = Math.round(v);
+    },
+  };
+}
+
 // RPE chips (optional) — full 1–10 scale, toggling state.rpe
 function rpeChipRow() {
   const rpeRow = el(`
@@ -435,7 +464,10 @@ function rpeChipRow() {
   return rpeRow;
 }
 
-function stepperRow(label, valueHtml, onStep) {
+// direct (optional): { get: () => number|null, set: (number|null) => void }
+// makes the value tappable — tap, type the number, Enter/blur to commit.
+// An empty input commits null (meaningful for weight: "no load").
+function stepperRow(label, valueHtml, onStep, direct) {
   const row = el(`
     <div class="stepper-row">
       <span class="label">${label}</span>
@@ -449,6 +481,34 @@ function stepperRow(label, valueHtml, onStep) {
   const update = () => { value.innerHTML = valueHtml(); };
   row.querySelector('.minus').onclick = () => { onStep(-1); update(); };
   row.querySelector('.plus').onclick = () => { onStep(1); update(); };
+  if (direct) {
+    value.classList.add('typable');
+    value.title = 'Tap to type';
+    value.onclick = () => {
+      if (value.querySelector('input')) return;
+      const input = el(`<input class="value-input" type="number" inputmode="decimal" step="any">`);
+      const cur = direct.get();
+      input.value = cur === null || cur === undefined ? '' : cur;
+      value.replaceChildren(input);
+      let done = false;
+      const finish = (commit) => {
+        if (done) return;
+        done = true;
+        if (commit) {
+          const raw = input.value.trim();
+          direct.set(raw === '' ? null : Number(raw));
+        }
+        update();
+      };
+      input.onblur = () => finish(true);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') finish(false);
+      };
+      input.focus();
+      input.select();
+    };
+  }
   update();
   return row;
 }
@@ -510,12 +570,12 @@ async function renderEditSet() {
   if (isHold) {
     card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
       state.durationSec = Math.max(5, state.durationSec + dir * 15);
-    }));
+    }, durationDirect()));
   } else {
     card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
       state.reps = Math.max(1, state.reps + dir);
-    }));
-    const inc = ex?.increment ?? 5;
+    }, repsDirect()));
+    const inc = ex?.increment ?? 2.5;
     card.append(stepperRow('Weight', () => {
       return state.weight === null ? '—' : `${state.weight}<small> lb</small>`;
     }, (dir) => {
@@ -525,7 +585,7 @@ async function renderEditSet() {
         const next = state.weight + dir * inc;
         state.weight = next < 0 ? null : next;
       }
-    }));
+    }, weightDirect()));
   }
 
   card.append(rpeChipRow());
