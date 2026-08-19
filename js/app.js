@@ -1,10 +1,11 @@
 import {
   initDb, listExercises, addExercise,
   todayKey, getWorkoutByDate, startWorkout, listWorkouts,
-  logSet, deleteSet, setsForWorkout, lastSetForExercise,
+  logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
   recentExerciseIds, exportAll,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
+import { APP_VERSION } from './version.js';
 
 const view = document.getElementById('view');
 const headerTitle = document.getElementById('header-title');
@@ -24,6 +25,8 @@ const state = {
   createName: '',          // prefill for the new-exercise form
   createLoad: 'weighted',
   createMuscles: new Set(),
+  editSet: null,           // set being edited
+  editReturn: 'today',     // screen to go back to after editing
 };
 
 function fmtDate(key) {
@@ -305,24 +308,7 @@ async function renderLog() {
     }));
   }
 
-  // RPE chips (optional) — full 1–10 scale
-  const rpeRow = el(`
-    <div class="rpe-row">
-      <span class="label" style="color:var(--text-dim)">Effort (RPE, optional)</span>
-      <div class="rpe-chips"></div>
-    </div>`);
-  const chips = rpeRow.querySelector('.rpe-chips');
-  for (const val of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
-    const chip = el(`<button class="rpe-chip">${val}</button>`);
-    if (state.rpe === val) chip.classList.add('selected');
-    chip.onclick = () => {
-      state.rpe = state.rpe === val ? null : val;
-      for (const c of chips.children) c.classList.remove('selected');
-      if (state.rpe === val) chip.classList.add('selected');
-    };
-    chips.append(chip);
-  }
-  card.append(rpeRow);
+  card.append(rpeChipRow());
 
   const logBtn = el(`<button class="btn" id="log-set">Log set</button>`);
   logBtn.onclick = async () => {
@@ -342,6 +328,27 @@ async function renderLog() {
   const setList = el(`<div class="set-list card"></div>`);
   view.append(setList);
   await renderLoggedSets(setList);
+}
+
+// RPE chips (optional) — full 1–10 scale, toggling state.rpe
+function rpeChipRow() {
+  const rpeRow = el(`
+    <div class="rpe-row">
+      <span class="label" style="color:var(--text-dim)">Effort (RPE, optional)</span>
+      <div class="rpe-chips"></div>
+    </div>`);
+  const chips = rpeRow.querySelector('.rpe-chips');
+  for (const val of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+    const chip = el(`<button class="rpe-chip">${val}</button>`);
+    if (state.rpe === val) chip.classList.add('selected');
+    chip.onclick = () => {
+      state.rpe = state.rpe === val ? null : val;
+      for (const c of chips.children) c.classList.remove('selected');
+      if (state.rpe === val) chip.classList.add('selected');
+    };
+    chips.append(chip);
+  }
+  return rpeRow;
 }
 
 function stepperRow(label, valueHtml, onStep) {
@@ -373,10 +380,11 @@ async function renderLoggedSets(container) {
   sets.forEach((s, i) => {
     const item = el(`
       <div class="set-item">
-        <span class="desc"></span>
+        <button class="desc editable" aria-label="edit set"></button>
         <button class="del" aria-label="delete set">✕</button>
       </div>`);
     item.querySelector('.desc').textContent = `Set ${i + 1} — ${setDesc(s)}`;
+    item.querySelector('.desc').onclick = () => openEditSet(s, 'log');
     item.querySelector('.del').onclick = async () => {
       await deleteSet(s.id);
       await renderLoggedSets(container);
@@ -385,11 +393,88 @@ async function renderLoggedSets(container) {
   });
 }
 
+// ---------- Edit a logged set (from today or from history) ----------
+
+function openEditSet(set, returnTo) {
+  state.editSet = set;
+  state.editReturn = returnTo;
+  state.reps = set.reps ?? 10;
+  state.weight = set.weight;
+  state.durationSec = set.durationSec ?? 30;
+  state.rpe = set.rpe;
+  state.screen = 'edit-set';
+  render();
+}
+
+async function renderEditSet() {
+  const s = state.editSet;
+  const exercises = await listExercises();
+  const ex = exercises.find((e) => e.id === s.exerciseId);
+  headerTitle.textContent = ex ? ex.name : 'Edit set';
+  headerDate.textContent = 'editing';
+  view.innerHTML = '';
+
+  const goBack = () => { state.screen = state.editReturn; render(); };
+
+  const back = el(`<button class="back-link">‹ Cancel</button>`);
+  back.onclick = goBack;
+  view.append(back);
+
+  const card = el(`<div class="card"></div>`);
+  const isHold = s.durationSec !== null && s.durationSec !== undefined;
+
+  if (isHold) {
+    card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
+      state.durationSec = Math.max(5, state.durationSec + dir * 15);
+    }));
+  } else {
+    card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
+      state.reps = Math.max(1, state.reps + dir);
+    }));
+    const inc = ex?.increment ?? 5;
+    card.append(stepperRow('Weight', () => {
+      return state.weight === null ? '—' : `${state.weight}<small> lb</small>`;
+    }, (dir) => {
+      if (state.weight === null) {
+        state.weight = dir > 0 ? inc : null;
+      } else {
+        const next = state.weight + dir * inc;
+        state.weight = next < 0 ? null : next;
+      }
+    }));
+  }
+
+  card.append(rpeChipRow());
+
+  const saveBtn = el(`<button class="btn" id="save-set">Save changes</button>`);
+  saveBtn.onclick = async () => {
+    await updateSet({
+      ...s,
+      reps: isHold ? null : state.reps,
+      weight: isHold ? null : state.weight,
+      rpe: state.rpe,
+      durationSec: isHold ? state.durationSec : null,
+    });
+    goBack();
+  };
+  card.append(saveBtn);
+
+  const delBtn = el(`<button class="btn danger" id="delete-set">Delete this set</button>`);
+  delBtn.onclick = async () => {
+    if (!confirm('Delete this set? This cannot be undone.')) return;
+    await deleteSet(s.id);
+    goBack();
+  };
+  card.append(delBtn);
+
+  view.append(card);
+}
+
 // ---------- History ----------
 
 async function renderHistory() {
   headerTitle.textContent = 'History';
-  headerDate.textContent = '';
+  headerDate.textContent = `v${APP_VERSION}`;
   view.innerHTML = '';
 
   const exportBtn = el(`<button class="btn secondary" style="margin:12px 0">Export all data (JSON)</button>`);
@@ -451,14 +536,28 @@ async function renderWorkoutDetail() {
     g.sets.push(s);
   }
 
+  if (grouped.length === 0) {
+    view.append(el(`<div class="empty"><p>No sets in this workout.</p></div>`));
+  }
+
   for (const g of grouped) {
     const card = el(`
       <div class="card workout-ex">
         <div class="name"></div>
-        <div class="sets"></div>
+        <div class="set-list"></div>
       </div>`);
     card.querySelector('.name').textContent = byId[g.exerciseId]?.name ?? '(deleted exercise)';
-    card.querySelector('.sets').textContent = g.sets.map(setDesc).join('  ·  ');
+    const list = card.querySelector('.set-list');
+    g.sets.forEach((s, i) => {
+      const item = el(`
+        <div class="set-item">
+          <button class="desc editable" aria-label="edit set"></button>
+          <span class="edit-hint">✎</span>
+        </div>`);
+      item.querySelector('.desc').textContent = `Set ${i + 1} — ${setDesc(s)}`;
+      item.querySelector('.desc').onclick = () => openEditSet(s, 'workout-detail');
+      list.append(item);
+    });
     view.append(card);
   }
 }
@@ -466,6 +565,7 @@ async function renderWorkoutDetail() {
 // ---------- Shell ----------
 
 function render() {
+  if (state.screen === 'edit-set') return renderEditSet();
   if (state.tab === 'today') {
     if (state.screen === 'picker') return renderPicker();
     if (state.screen === 'log') return renderLog();

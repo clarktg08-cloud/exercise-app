@@ -219,6 +219,24 @@ button { font-family: inherit; }
   cursor: pointer;
   padding: 4px 8px;
 }
+.set-item .desc.editable {
+  background: none; border: none;
+  color: var(--text);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  flex: 1;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.set-item .edit-hint { color: var(--text-dim); font-size: 0.9rem; }
+
+.btn.danger {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  margin-top: 10px;
+}
 
 .workout-ex { margin-bottom: 4px; }
 .workout-ex .name { font-weight: 600; }

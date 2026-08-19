@@ -19,6 +19,10 @@ muscle group, progressive-overload checks) from clean set-level data.
 - Service worker (`sw.js`) registers only on non-localhost, so dev never fights
   stale caches. **When deploying, bump `CACHE_VERSION` in sw.js** or phones will
   serve the old app.
+- **Bump `APP_VERSION` in `js/version.js` with every user-visible change.**
+  It shows in the History tab; Taylor uses it to confirm which build he's
+  looking at across devices. (Separate from sw.js CACHE_VERSION, which only
+  changes on deploys.)
 
 ## Where the data lives (danger zone)
 

@@ -4,7 +4,7 @@ const CACHE_VERSION = 'v1';
 const CACHE_NAME = `exercise-app-${CACHE_VERSION}`;
 const ASSETS = [
   '.', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/app.js', 'js/db.js', 'js/exercises.js',
+  'js/app.js', 'js/db.js', 'js/exercises.js', 'js/version.js',
 ];
 
 self.addEventListener('install', (e) => {

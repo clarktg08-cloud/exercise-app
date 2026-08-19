@@ -164,6 +164,12 @@ export async function logSet({ workoutId, exerciseId, reps, weight, rpe, duratio
   return set;
 }
 
+export async function updateSet(set) {
+  const db = await openDb();
+  await tx(db, 'sets', 'readwrite', (s) => s.put(set));
+  return set;
+}
+
 export async function deleteSet(id) {
   const db = await openDb();
   await tx(db, 'sets', 'readwrite', (s) => s.delete(id));
