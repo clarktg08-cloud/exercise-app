@@ -4,6 +4,7 @@ import {
   logSet, deleteSet, setsForWorkout, lastSetForExercise,
   recentExerciseIds, exportAll,
 } from './db.js';
+import { MUSCLE_GROUPS } from './exercises.js';
 
 const view = document.getElementById('view');
 const headerTitle = document.getElementById('header-title');
@@ -11,14 +12,18 @@ const headerDate = document.getElementById('header-date');
 
 const state = {
   tab: 'today',            // 'today' | 'history'
-  screen: 'today',         // 'today' | 'picker' | 'log' | 'history' | 'workout-detail'
+  screen: 'today',         // 'today' | 'picker' | 'log' | 'create' | 'history' | 'workout-detail'
   workout: null,           // today's workout, if started
   exercise: null,          // exercise being logged
   detailWorkout: null,     // workout opened from history
   reps: 10,
   weight: null,
   rpe: null,
+  durationSec: 30,
   search: '',
+  createName: '',          // prefill for the new-exercise form
+  createLoad: 'weighted',
+  createMuscles: new Set(),
 };
 
 function fmtDate(key) {
@@ -28,8 +33,11 @@ function fmtDate(key) {
 }
 
 function setDesc(s) {
+  const rpe = s.rpe === null || s.rpe === undefined ? '' : ` @ RPE ${s.rpe}`;
+  if (s.durationSec !== null && s.durationSec !== undefined) {
+    return `${s.durationSec}s hold${rpe}`;
+  }
   const w = s.weight === null ? '—' : `${s.weight} lb`;
-  const rpe = s.rpe === null ? '' : ` @ RPE ${s.rpe}`;
   return `${s.reps} reps × ${w}${rpe}`;
 }
 
@@ -149,20 +157,94 @@ async function renderPickerList(listEl, query) {
   listEl.append(el(`<div class="section-label">${q ? 'Results' : 'All exercises'}</div>`));
   for (const ex of matches) listEl.append(row(ex));
 
-  if (q && matches.length === 0) {
-    const create = el(`<button class="btn secondary" style="margin-top:10px">+ Create “${'​'}”</button>`);
-    create.textContent = `+ Create “${query.trim()}”`;
-    create.onclick = async () => {
-      const ex = await addExercise({
-        name: query.trim(),
-        muscles: [],
-        load: 'weighted',
-        increment: 5,
-      });
-      openLog(ex);
+  const create = el(`<button class="btn secondary" style="margin-top:12px"></button>`);
+  create.textContent = q && matches.length === 0
+    ? `+ Create “${query.trim()}”`
+    : '+ New exercise';
+  create.onclick = () => {
+    state.createName = query.trim();
+    state.createLoad = 'weighted';
+    state.createMuscles = new Set();
+    state.screen = 'create';
+    render();
+  };
+  listEl.append(create);
+}
+
+// ---------- New exercise form ----------
+
+const LOAD_TYPES = [
+  { key: 'weighted', label: 'Weights' },
+  { key: 'unloaded', label: 'Band / bodyweight' },
+  { key: 'hold', label: 'Stretch / hold' },
+];
+
+function renderCreate() {
+  headerTitle.textContent = 'New exercise';
+  headerDate.textContent = '';
+  view.innerHTML = '';
+
+  const back = el(`<button class="back-link">‹ Back</button>`);
+  back.onclick = () => { state.screen = 'picker'; render(); };
+  view.append(back);
+
+  const card = el(`<div class="card"></div>`);
+
+  const name = el(`<input class="search-input" type="text" placeholder="Exercise name" autocomplete="off">`);
+  name.value = state.createName;
+  name.oninput = () => { state.createName = name.value; };
+  card.append(name);
+
+  card.append(el(`<div class="section-label">Type</div>`));
+  const typeRow = el(`<div class="chip-grid"></div>`);
+  for (const t of LOAD_TYPES) {
+    const chip = el(`<button class="pick-chip"></button>`);
+    chip.textContent = t.label;
+    if (state.createLoad === t.key) chip.classList.add('selected');
+    chip.onclick = () => {
+      state.createLoad = t.key;
+      for (const c of typeRow.children) c.classList.remove('selected');
+      chip.classList.add('selected');
     };
-    listEl.append(create);
+    typeRow.append(chip);
   }
+  card.append(typeRow);
+
+  card.append(el(`<div class="section-label">Muscle groups (tap all that apply)</div>`));
+  const muscleRow = el(`<div class="chip-grid"></div>`);
+  for (const m of MUSCLE_GROUPS) {
+    const chip = el(`<button class="pick-chip"></button>`);
+    chip.textContent = m;
+    if (state.createMuscles.has(m)) chip.classList.add('selected');
+    chip.onclick = () => {
+      if (state.createMuscles.has(m)) {
+        state.createMuscles.delete(m);
+        chip.classList.remove('selected');
+      } else {
+        state.createMuscles.add(m);
+        chip.classList.add('selected');
+      }
+    };
+    muscleRow.append(chip);
+  }
+  card.append(muscleRow);
+
+  const saveBtn = el(`<button class="btn" style="margin-top:14px">Create exercise</button>`);
+  saveBtn.onclick = async () => {
+    const trimmed = state.createName.trim();
+    if (!trimmed) { name.focus(); return; }
+    const ex = await addExercise({
+      name: trimmed,
+      muscles: [...state.createMuscles],
+      load: state.createLoad,
+      increment: 5,
+    });
+    openLog(ex);
+  };
+  card.append(saveBtn);
+
+  view.append(card);
+  if (!state.createName) name.focus();
 }
 
 // ---------- Logging ----------
@@ -170,8 +252,9 @@ async function renderPickerList(listEl, query) {
 async function openLog(exercise) {
   state.exercise = exercise;
   const last = await lastSetForExercise(exercise.id);
-  state.reps = last ? last.reps : 10;
+  state.reps = last?.reps ?? 10;
   state.weight = last ? last.weight : (exercise.load === 'weighted' ? 0 : null);
+  state.durationSec = last?.durationSec ?? 30;
   state.rpe = null;
   state.screen = 'log';
   render();
@@ -195,33 +278,41 @@ async function renderLog() {
   view.append(lastLine);
 
   const card = el(`<div class="card"></div>`);
+  const isHold = ex.load === 'hold';
 
-  // Reps stepper
-  card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
-    state.reps = Math.max(1, state.reps + dir);
-  }));
+  if (isHold) {
+    // Stretches / planks: duration instead of reps × weight
+    card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
+      state.durationSec = Math.max(5, state.durationSec + dir * 15);
+    }));
+  } else {
+    // Reps stepper
+    card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
+      state.reps = Math.max(1, state.reps + dir);
+    }));
 
-  // Weight stepper (null = no load, shown as "—")
-  const inc = ex.increment ?? 5;
-  card.append(stepperRow('Weight', () => {
-    return state.weight === null ? '—' : `${state.weight}<small> lb</small>`;
-  }, (dir) => {
-    if (state.weight === null) {
-      state.weight = dir > 0 ? inc : null;
-    } else {
-      const next = state.weight + dir * inc;
-      state.weight = next < 0 ? null : next;
-    }
-  }));
+    // Weight stepper (null = no load, shown as "—")
+    const inc = ex.increment ?? 5;
+    card.append(stepperRow('Weight', () => {
+      return state.weight === null ? '—' : `${state.weight}<small> lb</small>`;
+    }, (dir) => {
+      if (state.weight === null) {
+        state.weight = dir > 0 ? inc : null;
+      } else {
+        const next = state.weight + dir * inc;
+        state.weight = next < 0 ? null : next;
+      }
+    }));
+  }
 
-  // RPE chips (optional)
+  // RPE chips (optional) — full 1–10 scale
   const rpeRow = el(`
     <div class="rpe-row">
       <span class="label" style="color:var(--text-dim)">Effort (RPE, optional)</span>
       <div class="rpe-chips"></div>
     </div>`);
   const chips = rpeRow.querySelector('.rpe-chips');
-  for (const val of [6, 7, 8, 9, 10]) {
+  for (const val of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
     const chip = el(`<button class="rpe-chip">${val}</button>`);
     if (state.rpe === val) chip.classList.add('selected');
     chip.onclick = () => {
@@ -238,9 +329,10 @@ async function renderLog() {
     await logSet({
       workoutId: state.workout.id,
       exerciseId: ex.id,
-      reps: state.reps,
-      weight: state.weight,
+      reps: isHold ? null : state.reps,
+      weight: isHold ? null : state.weight,
       rpe: state.rpe,
+      durationSec: isHold ? state.durationSec : null,
     });
     await renderLoggedSets(setList);
   };
@@ -377,6 +469,7 @@ function render() {
   if (state.tab === 'today') {
     if (state.screen === 'picker') return renderPicker();
     if (state.screen === 'log') return renderLog();
+    if (state.screen === 'create') return renderCreate();
     state.screen = 'today';
     return renderToday();
   }

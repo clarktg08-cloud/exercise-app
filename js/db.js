@@ -4,8 +4,10 @@
 // Stores:
 //   exercises: { id, name, muscles[], load ('weighted'|'unloaded'), increment, isCustom, createdAt }
 //   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes }
-//   sets:      { id, workoutId, exerciseId, reps, weight|null, rpe|null, loggedAt }
+//   sets:      { id, workoutId, exerciseId, reps|null, weight|null, rpe|null,
+//                durationSec|null, loggedAt }
 // weight null = no load / not measured (bands, bodyweight). Not the same as 0.
+// Hold-type sets (stretches, planks) use durationSec with reps/weight null.
 
 import { SEED_EXERCISES } from './exercises.js';
 
@@ -56,10 +58,15 @@ function getAll(store) {
 export async function initDb() {
   const db = await openDb();
   const existing = await getAll('exercises');
-  if (existing.length === 0) {
-    const now = Date.now();
-    await tx(db, 'exercises', 'readwrite', (store) => {
-      for (const e of SEED_EXERCISES) {
+  const byName = new Map(existing.map((e) => [e.name, e]));
+  const now = Date.now();
+  // Seed-sync: insert seed exercises that are missing, and update non-custom
+  // ones whose definition changed (e.g. Plank became a timed hold). Custom
+  // exercises are never touched.
+  await tx(db, 'exercises', 'readwrite', (store) => {
+    for (const e of SEED_EXERCISES) {
+      const cur = byName.get(e.name);
+      if (!cur) {
         store.put({
           id: crypto.randomUUID(),
           name: e.name,
@@ -69,10 +76,15 @@ export async function initDb() {
           isCustom: false,
           createdAt: now,
         });
+      } else if (!cur.isCustom &&
+                 (cur.load !== e.load ||
+                  cur.muscles.join() !== e.muscles.join())) {
+        store.put({ ...cur, load: e.load, muscles: e.muscles,
+                    increment: e.increment ?? cur.increment });
       }
-      return store.count();
-    });
-  }
+    }
+    return store.count();
+  });
 }
 
 // --- exercises ---
@@ -136,15 +148,16 @@ export function listWorkouts() {
 
 // --- sets ---
 
-export async function logSet({ workoutId, exerciseId, reps, weight, rpe }) {
+export async function logSet({ workoutId, exerciseId, reps, weight, rpe, durationSec }) {
   const db = await openDb();
   const set = {
     id: crypto.randomUUID(),
     workoutId,
     exerciseId,
-    reps,
+    reps: reps ?? null,
     weight: weight ?? null,
     rpe: rpe ?? null,
+    durationSec: durationSec ?? null,
     loggedAt: Date.now(),
   };
   await tx(db, 'sets', 'readwrite', (s) => s.put(set));

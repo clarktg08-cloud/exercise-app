@@ -1,7 +1,8 @@
 // Seed exercise library. Users can add their own; these just prevent a cold start.
 // muscles: primary muscle groups the exercise trains (feeds volume-per-muscle analytics).
 // load: 'weighted' shows the weight stepper by default; 'unloaded' (bands/bodyweight)
-//       hides it and leans on RPE instead. increment = weight stepper step in lb.
+//       starts with no weight and leans on RPE; 'hold' (stretches, planks) logs
+//       duration in seconds instead of reps × weight. increment = weight step in lb.
 
 export const MUSCLE_GROUPS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
@@ -44,7 +45,15 @@ export const SEED_EXERCISES = [
   { name: 'Hammer Curl',          muscles: ['biceps'],                 load: 'weighted', increment: 5 },
 
   // Core
-  { name: 'Plank',                muscles: ['core'],                   load: 'unloaded' },
+  { name: 'Plank',                muscles: ['core'],                   load: 'hold' },
   { name: 'Crunch',               muscles: ['core'],                   load: 'unloaded' },
   { name: 'Back Extension',       muscles: ['back', 'glutes'],         load: 'unloaded' },
+
+  // Stretches (timed holds; band/wall variants welcome as custom exercises)
+  { name: 'Hamstring Stretch',        muscles: ['hamstrings'],      load: 'hold' },
+  { name: 'Quad Stretch',             muscles: ['quads'],           load: 'hold' },
+  { name: 'Calf Stretch (wall)',      muscles: ['calves'],          load: 'hold' },
+  { name: 'Hip Flexor Stretch',       muscles: ['hips'],            load: 'hold' },
+  { name: 'Figure-4 Glute Stretch',   muscles: ['glutes', 'hips'],  load: 'hold' },
+  { name: 'Chest Stretch (doorway)',  muscles: ['chest'],           load: 'hold' },
 ];
