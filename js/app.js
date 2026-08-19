@@ -2,6 +2,7 @@ import {
   initDb, listExercises, addExercise, updateExercise,
   todayKey, getWorkoutByDate, startWorkout, updateWorkout, listWorkouts,
   logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
+  lastSessionForExercise,
   recentExerciseIds, listSets, exportAll, importAll,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
@@ -44,6 +45,37 @@ function setDesc(s) {
   }
   const w = s.weight === null ? '—' : `${s.weight} lb`;
   return `${s.reps} reps × ${w}${rpe}`;
+}
+
+// One past session's sets, condensed for the "Last time" line. Same-weight
+// sessions collapse to "135 lb × 10, 8, 6"; varied ones stay explicit.
+// weight null (bands, bodyweight) shows reps only — never "0 lb".
+function sessionDesc(sets) {
+  const isHold = (s) => s.durationSec !== null && s.durationSec !== undefined;
+  const reps = (list) => `${list.join(', ')} rep${list.length === 1 && list[0] === 1 ? '' : 's'}`;
+  let body;
+  if (sets.every(isHold)) {
+    body = sets.map((s) => `${s.durationSec}s`).join(', ');
+  } else if (sets.every((s) => !isHold(s))) {
+    const w = sets[0].weight;
+    if (sets.every((s) => s.weight === w)) {
+      const list = sets.map((s) => s.reps);
+      body = w === null ? reps(list) : `${w} lb × ${list.join(', ')}`;
+    } else {
+      body = sets.map((s) => s.weight === null
+        ? reps([s.reps]) : `${s.weight} lb × ${s.reps}`).join(', ');
+    }
+  } else {
+    body = sets.map(setDesc).join('; ');
+  }
+  // RPE only when every set has one — a partial range would overstate it.
+  const rpes = sets.map((s) => s.rpe).filter((r) => r !== null && r !== undefined);
+  if (rpes.length > 0 && rpes.length === sets.length) {
+    const lo = Math.min(...rpes);
+    const hi = Math.max(...rpes);
+    body += lo === hi ? ` · RPE ${lo}` : ` · RPE ${lo}–${hi}`;
+  }
+  return body;
 }
 
 function el(html) {
@@ -292,11 +324,16 @@ async function renderLog() {
   back.onclick = () => { state.screen = 'today'; render(); };
   view.append(back);
 
-  const last = await lastSetForExercise(ex.id);
+  // "Last time" = the last session that included this exercise, today's
+  // in-progress workout excluded, so the line stays put while you log.
+  const prev = await lastSessionForExercise(ex.id, state.workout.id);
   const lastLine = el(`<div class="log-last"></div>`);
-  lastLine.textContent = last
-    ? `Last time: ${setDesc(last)}`
-    : 'First time logging this exercise.';
+  if (prev) {
+    const when = prev.workout ? ` (${fmtDate(prev.workout.date)})` : '';
+    lastLine.textContent = `Last time${when}: ${sessionDesc(prev.sets)}`;
+  } else {
+    lastLine.textContent = 'First time logging this exercise.';
+  }
   view.append(lastLine);
 
   // Optional form notes on the exercise (e.g. "wrap strap under arms, rotate away")

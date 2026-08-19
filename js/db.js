@@ -215,6 +215,32 @@ export async function lastSetForExercise(exerciseId) {
   });
 }
 
+// The most recent previous session that included this exercise: the workout
+// plus every set of this exercise logged in it, oldest first. Pass today's
+// workout id as excludeWorkoutId so "last time" means the last session, not
+// the set logged a minute ago. Returns null if there is no earlier session.
+export async function lastSessionForExercise(exerciseId, excludeWorkoutId = null) {
+  const db = await openDb();
+  const all = await new Promise((resolve, reject) => {
+    const req = db.transaction('sets').objectStore('sets')
+      .index('exerciseId').getAll(exerciseId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  const candidates = all.filter((s) => s.workoutId !== excludeWorkoutId);
+  if (candidates.length === 0) return null;
+  const latest = candidates.reduce((a, b) => (b.loggedAt > a.loggedAt ? b : a));
+  const sets = candidates
+    .filter((s) => s.workoutId === latest.workoutId)
+    .sort((a, b) => a.loggedAt - b.loggedAt);
+  const workout = await new Promise((resolve, reject) => {
+    const req = db.transaction('workouts').objectStore('workouts').get(latest.workoutId);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror = () => reject(req.error);
+  });
+  return { workout, sets };
+}
+
 // Most recently used exercises, newest first.
 export async function recentExerciseIds(limit = 8) {
   const all = await getAll('sets');
