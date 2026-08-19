@@ -6,15 +6,16 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.3.1**, all work committed locally on `master`
-  (latest: `ca539fd`). Working tree clean. **No git remote exists yet.**
+- **App version v0.3.2**, all work committed locally on `master`
+  (latest: `013110a`). Working tree clean. **No git remote exists yet.**
 - Nothing has ever been pushed or deployed. **Deploy (GitHub + Cloudflare
   Pages) is agreed as the next big step but WAITS for Taylor's explicit
   "go" — do not create the remote or deploy without it.**
 - Built so far: logging (weighted / band-bodyweight / stretch-hold types,
   1–10 RPE, 2.5 lb steps, tap-to-type values), edit/delete any past set,
   exercise form notes, rest timer, repeat past workout (planned list),
-  JSON export + import, Insights tab (weekly sets/muscle, Epley e1RM).
+  JSON export + import, Insights tab (weekly sets/muscle, Epley e1RM),
+  "Last time" line showing the full previous session with its date.
 
 ## Running / testing
 
@@ -28,6 +29,11 @@ first; this file is just the current state between them.
 
 ## Small open questions Taylor hasn't decided (ask only if relevant)
 
+- **Stepper prefill on the log screen** (v0.3.2): still prefills from the
+  *last* set of your previous session, which is usually your most fatigued
+  one, so the default drifts low over time. Candidates: best set of that
+  session, or first set. Taylor is deciding by feel once he's using the app
+  for real — don't change it unprompted.
 - Rest timer: currently counts up forever; option to hide after long gaps.
 - Planks are excluded from weekly sets-per-muscle (they're hold-type);
   arguably they should count toward core. Flagged to him, undecided.
