@@ -1,0 +1,201 @@
+// IndexedDB layer. All training data lives here until cloud sync exists —
+// see CLAUDE.md before changing stores or DB_VERSION.
+//
+// Stores:
+//   exercises: { id, name, muscles[], load ('weighted'|'unloaded'), increment, isCustom, createdAt }
+//   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes }
+//   sets:      { id, workoutId, exerciseId, reps, weight|null, rpe|null, loggedAt }
+// weight null = no load / not measured (bands, bodyweight). Not the same as 0.
+
+import { SEED_EXERCISES } from './exercises.js';
+
+const DB_NAME = 'exercise-app';
+const DB_VERSION = 1;
+
+let dbPromise = null;
+
+function openDb() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const ex = db.createObjectStore('exercises', { keyPath: 'id' });
+      ex.createIndex('name', 'name', { unique: false });
+      const wo = db.createObjectStore('workouts', { keyPath: 'id' });
+      wo.createIndex('date', 'date', { unique: false });
+      const sets = db.createObjectStore('sets', { keyPath: 'id' });
+      sets.createIndex('workoutId', 'workoutId', { unique: false });
+      sets.createIndex('exerciseId', 'exerciseId', { unique: false });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+function tx(db, store, mode, fn) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, mode);
+    const result = fn(t.objectStore(store));
+    t.oncomplete = () => resolve(result.result !== undefined ? result.result : result);
+    t.onerror = () => reject(t.error);
+  });
+}
+
+function getAll(store) {
+  return openDb().then((db) =>
+    new Promise((resolve, reject) => {
+      const req = db.transaction(store).objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    })
+  );
+}
+
+export async function initDb() {
+  const db = await openDb();
+  const existing = await getAll('exercises');
+  if (existing.length === 0) {
+    const now = Date.now();
+    await tx(db, 'exercises', 'readwrite', (store) => {
+      for (const e of SEED_EXERCISES) {
+        store.put({
+          id: crypto.randomUUID(),
+          name: e.name,
+          muscles: e.muscles,
+          load: e.load,
+          increment: e.increment ?? 5,
+          isCustom: false,
+          createdAt: now,
+        });
+      }
+      return store.count();
+    });
+  }
+}
+
+// --- exercises ---
+
+export function listExercises() {
+  return getAll('exercises').then((list) =>
+    list.sort((a, b) => a.name.localeCompare(b.name)));
+}
+
+export async function addExercise({ name, muscles, load, increment }) {
+  const db = await openDb();
+  const exercise = {
+    id: crypto.randomUUID(),
+    name,
+    muscles,
+    load,
+    increment: increment ?? 5,
+    isCustom: true,
+    createdAt: Date.now(),
+  };
+  await tx(db, 'exercises', 'readwrite', (s) => s.put(exercise));
+  return exercise;
+}
+
+// --- workouts ---
+
+export function todayKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export async function getWorkoutByDate(date) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('workouts').objectStore('workouts')
+      .index('date').getAll(date);
+    req.onsuccess = () => resolve(req.result[0] ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function startWorkout(date) {
+  const db = await openDb();
+  const workout = {
+    id: crypto.randomUUID(),
+    date,
+    startedAt: Date.now(),
+    endedAt: null,
+    notes: '',
+  };
+  await tx(db, 'workouts', 'readwrite', (s) => s.put(workout));
+  return workout;
+}
+
+export function listWorkouts() {
+  return getAll('workouts').then((list) =>
+    list.sort((a, b) => b.date.localeCompare(a.date)));
+}
+
+// --- sets ---
+
+export async function logSet({ workoutId, exerciseId, reps, weight, rpe }) {
+  const db = await openDb();
+  const set = {
+    id: crypto.randomUUID(),
+    workoutId,
+    exerciseId,
+    reps,
+    weight: weight ?? null,
+    rpe: rpe ?? null,
+    loggedAt: Date.now(),
+  };
+  await tx(db, 'sets', 'readwrite', (s) => s.put(set));
+  return set;
+}
+
+export async function deleteSet(id) {
+  const db = await openDb();
+  await tx(db, 'sets', 'readwrite', (s) => s.delete(id));
+}
+
+export async function setsForWorkout(workoutId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('sets').objectStore('sets')
+      .index('workoutId').getAll(workoutId);
+    req.onsuccess = () => resolve(req.result.sort((a, b) => a.loggedAt - b.loggedAt));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function lastSetForExercise(exerciseId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('sets').objectStore('sets')
+      .index('exerciseId').getAll(exerciseId);
+    req.onsuccess = () => {
+      const sets = req.result.sort((a, b) => b.loggedAt - a.loggedAt);
+      resolve(sets[0] ?? null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Most recently used exercises, newest first.
+export async function recentExerciseIds(limit = 8) {
+  const all = await getAll('sets');
+  all.sort((a, b) => b.loggedAt - a.loggedAt);
+  const seen = [];
+  for (const s of all) {
+    if (!seen.includes(s.exerciseId)) seen.push(s.exerciseId);
+    if (seen.length >= limit) break;
+  }
+  return seen;
+}
+
+// --- export ---
+
+export async function exportAll() {
+  const [exercises, workouts, sets] = await Promise.all([
+    getAll('exercises'), getAll('workouts'), getAll('sets'),
+  ]);
+  return { exportedAt: new Date().toISOString(), version: DB_VERSION, exercises, workouts, sets };
+}
