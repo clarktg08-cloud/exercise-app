@@ -1,6 +1,7 @@
 import {
   initDb, listExercises, addExercise, updateExercise,
-  todayKey, getWorkoutByDate, startWorkout, updateWorkout, listWorkouts,
+  todayKey, trainingDayKey, getWorkoutByDate, getActiveWorkout, workoutsForDay,
+  startWorkout, updateWorkout, listWorkouts,
   logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
   lastSessionForExercise,
   recentExerciseIds, listSets, exportAll, importAll,
@@ -52,6 +53,19 @@ const SIDE_NOTE = {
 
 function sideNote(side) {
   return SIDE_NOTE[side] ?? '';
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+// A session that started after midnight belongs to the previous training day,
+// so its clock time alone reads as though it came first. Naming the clock day
+// removes the ambiguity: "12:49 AM Thu" under a Wednesday heading.
+function sessionTime(w) {
+  const t = fmtTime(w.startedAt);
+  if (todayKey(new Date(w.startedAt)) === w.date) return t;
+  return `${t} ${new Date(w.startedAt).toLocaleDateString(undefined, { weekday: 'short' })}`;
 }
 
 function setDesc(s) {
@@ -113,23 +127,29 @@ function el(html) {
 // ---------- Today ----------
 
 async function renderToday() {
+  const dayKey = trainingDayKey();
   headerTitle.textContent = 'Today';
-  headerDate.textContent = fmtDate(todayKey());
+  headerDate.textContent = fmtDate(dayKey);
   view.innerHTML = '';
 
-  state.workout = await getWorkoutByDate(todayKey());
+  // The live session, if one is still running. Sessions end by walking away:
+  // after SESSION_GAP_MS the next set starts a new one.
+  state.workout = await getActiveWorkout();
+  const dayWorkouts = await workoutsForDay(dayKey);
+  const earlier = dayWorkouts.filter((w) => w.id !== state.workout?.id);
 
   if (!state.workout) {
     view.append(el(`
       <div class="empty">
-        <p>No workout yet today.</p>
+        <p>${earlier.length ? 'No session running right now.' : 'No workout yet today.'}</p>
         <button class="btn" id="start-workout">Start workout</button>
       </div>`));
     document.getElementById('start-workout').onclick = async () => {
-      state.workout = await startWorkout(todayKey());
+      state.workout = await startWorkout(trainingDayKey());
       state.screen = 'picker';
       render();
     };
+    await appendEarlierSessions(earlier);
     return;
   }
 
@@ -184,9 +204,39 @@ async function renderToday() {
       view.append(card);
     }
   }
+
+  await appendEarlierSessions(earlier);
 }
 
-// ---------- Exercise picker ----------
+// Sessions already finished on this training day, shown as a summary rather
+// than merged into the live one — two sessions are two sessions, even when
+// they land on the same date.
+async function appendEarlierSessions(earlier) {
+  if (earlier.length === 0) return;
+  const exercises = await listExercises();
+  const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
+
+  view.append(el(`<div class="section-label">Earlier today</div>`));
+  for (const w of earlier) {
+    const sets = await setsForWorkout(w.id);
+    const names = [];
+    for (const s of sets) {
+      const n = byId[s.exerciseId]?.name;
+      if (n && !names.includes(n)) names.push(n);
+    }
+    const card = el(`
+      <div class="card workout-ex session-past">
+        <div class="name"></div>
+        <div class="sets"></div>
+      </div>`);
+    card.querySelector('.name').textContent = sessionTime(w);
+    card.querySelector('.sets').textContent = names.length
+      ? `${sets.length} set${sets.length === 1 ? '' : 's'} — ${names.join(', ')}`
+      : 'No sets logged';
+    card.onclick = () => { state.detailWorkout = w; state.screen = 'workout-detail'; render(); };
+    view.append(card);
+  }
+}
 
 async function renderPicker() {
   headerTitle.textContent = 'Add exercise';
@@ -1051,7 +1101,25 @@ async function renderHistory() {
   const exercises = await listExercises();
   const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
 
+  // Group by training day so two sessions on one day read as two sessions
+  // under one date, rather than two unexplained entries with the same header.
+  const byDay = [];
   for (const w of workouts) {
+    let d = byDay.find((x) => x.date === w.date);
+    if (!d) { d = { date: w.date, sessions: [] }; byDay.push(d); }
+    d.sessions.push(w);
+  }
+  for (const d of byDay) d.sessions.sort((a, b) => a.startedAt - b.startedAt);
+
+  for (const day of byDay) {
+    view.append(el(`<div class="section-label">${fmtDate(day.date)}</div>`));
+    for (const w of day.sessions) {
+      await appendHistoryItem(w, byId, day.sessions.length > 1);
+    }
+  }
+}
+
+async function appendHistoryItem(w, byId, showTime) {
     const sets = await setsForWorkout(w.id);
     const names = [...new Set(sets.map((s) => byId[s.exerciseId]?.name).filter(Boolean))];
     const item = el(`
@@ -1059,18 +1127,20 @@ async function renderHistory() {
         <div class="date"></div>
         <div class="summary"></div>
       </div>`);
-    item.querySelector('.date').textContent = fmtDate(w.date);
+    // The clock time is what makes a 1:25am session obviously last night's,
+    // so it is always shown when a day holds more than one session.
+    item.querySelector('.date').textContent =
+      showTime ? sessionTime(w) : `${fmtDate(w.date)} · ${sessionTime(w)}`;
     item.querySelector('.summary').textContent =
       sets.length === 0 ? 'No sets logged'
-        : `${sets.length} sets — ${names.join(', ')}`;
+        : `${sets.length} set${sets.length === 1 ? '' : 's'} — ${names.join(', ')}`;
     item.onclick = () => { state.detailWorkout = w; state.screen = 'workout-detail'; render(); };
     view.append(item);
-  }
 }
 
 async function renderWorkoutDetail() {
   const w = state.detailWorkout;
-  headerTitle.textContent = fmtDate(w.date);
+  headerTitle.textContent = `${fmtDate(w.date)} · ${sessionTime(w)}`;
   headerDate.textContent = '';
   view.innerHTML = '';
 
@@ -1082,17 +1152,18 @@ async function renderWorkoutDetail() {
   const exercises = await listExercises();
   const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
 
-  if (w.date !== todayKey() && sets.length > 0) {
+  if (w.date !== trainingDayKey() && sets.length > 0) {
     const repeatBtn = el(`<button class="btn" style="margin:10px 0">Repeat this workout today</button>`);
     repeatBtn.onclick = async () => {
       const ids = [...new Set(sets.map((s) => s.exerciseId))].filter((id) => byId[id]);
-      let today = await getWorkoutByDate(todayKey());
-      if (!today) {
-        today = await startWorkout(todayKey(), ids);
+      // Plan into the live session if one is running, otherwise open a new one.
+      let target = await getActiveWorkout();
+      if (!target) {
+        target = await startWorkout(trainingDayKey(), ids);
       } else {
-        today.plannedExerciseIds =
-          [...new Set([...(today.plannedExerciseIds ?? []), ...ids])];
-        await updateWorkout(today);
+        target.plannedExerciseIds =
+          [...new Set([...(target.plannedExerciseIds ?? []), ...ids])];
+        await updateWorkout(target);
       }
       switchTab('today');
     };

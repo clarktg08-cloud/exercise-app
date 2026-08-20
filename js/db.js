@@ -103,6 +103,75 @@ export async function initDb() {
     }
     return store.count();
   });
+  await migrateSessions();
+}
+
+// Bring stored workouts in line with the session model:
+//   1. re-date each workout from its real start time using the 4am boundary
+//   2. split any workout whose sets contain a gap longer than SESSION_GAP_MS
+//      into separate sessions (a set logged, then sleep, then more sets)
+// Runs on every startup by design: it is idempotent, because once a workout
+// has been split it contains no oversized gaps and its date already matches.
+// Nothing is deleted and no timestamp is altered — sets only ever change which
+// session they point at.
+async function migrateSessions() {
+  const db = await openDb();
+  const [workouts, sets] = await Promise.all([getAll('workouts'), getAll('sets')]);
+  const byWorkout = {};
+  for (const s of sets) (byWorkout[s.workoutId] ??= []).push(s);
+
+  const changed = [];
+  const created = [];
+  const moved = [];
+
+  for (const w of workouts) {
+    const list = (byWorkout[w.id] ?? []).sort((a, b) => a.loggedAt - b.loggedAt);
+
+    if (list.length === 0) {
+      const date = trainingDayKey(w.startedAt);
+      if (w.date !== date) changed.push({ ...w, date });
+      continue;
+    }
+
+    const runs = [[list[0]]];
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].loggedAt - list[i - 1].loggedAt > SESSION_GAP_MS) runs.push([list[i]]);
+      else runs[runs.length - 1].push(list[i]);
+    }
+
+    // The original record keeps the first run, so its id and any notes survive.
+    const firstDate = trainingDayKey(w.startedAt);
+    if (w.date !== firstDate) changed.push({ ...w, date: firstDate });
+
+    for (let i = 1; i < runs.length; i++) {
+      const run = runs[i];
+      const startedAt = run[0].loggedAt;
+      const session = {
+        id: crypto.randomUUID(),
+        date: trainingDayKey(startedAt),
+        startedAt,
+        endedAt: run[run.length - 1].loggedAt,
+        notes: '',
+        plannedExerciseIds: [],
+      };
+      created.push(session);
+      for (const s of run) moved.push({ ...s, workoutId: session.id });
+    }
+  }
+
+  if (changed.length || created.length) {
+    await tx(db, 'workouts', 'readwrite', (store) => {
+      for (const w of [...changed, ...created]) store.put(w);
+      return store.count();
+    });
+  }
+  if (moved.length) {
+    await tx(db, 'sets', 'readwrite', (store) => {
+      for (const s of moved) store.put(s);
+      return store.count();
+    });
+  }
+  return { redated: changed.length, split: created.length, setsMoved: moved.length };
 }
 
 // --- exercises ---
@@ -136,11 +205,33 @@ export async function updateExercise(exercise) {
 
 // --- workouts ---
 
-export function todayKey(d = new Date()) {
+// A training day starts at 4am, not midnight: a session logged at 1:25am
+// belongs to the night before, which is how it is trained and remembered.
+// loggedAt / startedAt are never rewritten — the day is DERIVED from them,
+// so changing this boundary regroups history correctly instead of corrupting it.
+export const DAY_START_HOUR = 4;
+
+// A gap longer than this means you left and came back, so the next set starts
+// a new session rather than joining the old one. Sleep clears it comfortably.
+export const SESSION_GAP_MS = 3 * 60 * 60 * 1000;
+
+function dateKeyOf(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// Which training day a moment belongs to.
+export function trainingDayKey(ts = Date.now()) {
+  const d = new Date(ts);
+  if (d.getHours() < DAY_START_HOUR) d.setDate(d.getDate() - 1);
+  return dateKeyOf(d);
+}
+
+// Raw calendar date, for things that genuinely mean "today" (export filenames).
+export function todayKey(d = new Date()) {
+  return dateKeyOf(d);
 }
 
 export async function getWorkoutByDate(date) {
@@ -151,6 +242,33 @@ export async function getWorkoutByDate(date) {
     req.onsuccess = () => resolve(req.result[0] ?? null);
     req.onerror = () => reject(req.error);
   });
+}
+
+// Every workout on a training day, oldest session first.
+export async function workoutsForDay(date) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('workouts').objectStore('workouts')
+      .index('date').getAll(date);
+    req.onsuccess = () => resolve(req.result.sort((a, b) => a.startedAt - b.startedAt));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// The session still in progress, or null. A session is live while its most
+// recent set (or its start, if empty) is inside SESSION_GAP_MS.
+export async function getActiveWorkout(now = Date.now()) {
+  const [workouts, sets] = await Promise.all([getAll('workouts'), getAll('sets')]);
+  if (workouts.length === 0) return null;
+  const lastActivity = {};
+  for (const s of sets) {
+    lastActivity[s.workoutId] = Math.max(lastActivity[s.workoutId] ?? 0, s.loggedAt);
+  }
+  const candidates = workouts
+    .map((w) => ({ w, at: lastActivity[w.id] ?? w.startedAt }))
+    .sort((a, b) => b.at - a.at);
+  const newest = candidates[0];
+  return now - newest.at <= SESSION_GAP_MS ? newest.w : null;
 }
 
 export async function startWorkout(date, plannedExerciseIds = []) {
