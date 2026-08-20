@@ -15,6 +15,14 @@ order and scope; this file just keeps sessions on the same page.
   past workout (planned-exercise list on Today), JSON import (merge by id),
   Insights tab v1: training sets per muscle/week (holds excluded on purpose),
   Epley est-1RM trends (loaded sets, 1–10 reps only), all-time totals.
+- **v0.4** — picker filters by type + muscle, calves/shins and hip groups split,
+  rest timer with a reps-based suggested target that goes quiet after a long gap.
+- **v0.5** — sessions: a workout is a session, not a calendar day. Training day
+  starts at 4am, a gap over 3 hours starts a new session, history groups
+  sessions under their day.
+- **v0.6** — calendar view for History: month grid marking training days, tap a
+  day for its sessions (straight into the session when the day holds only one).
+  Calendar / List toggle remembered per device.
 
 ## Agreed next (order not final)
 
@@ -48,11 +56,8 @@ order and scope; this file just keeps sessions on the same page.
   (hypothetical — he has not bought a set). See parked ideas for how to model
   it honestly.
 
-## Agreed next — after v0.5.0
+## Agreed next — after v0.6.0
 
-- **Calendar view for History** — month grid marking training days, tap a day
-  for its sessions. Taylor asked for this; v0.5.0 delivered the session model
-  and day grouping underneath it, the grid itself is not built.
 - **Editing an exercise's muscle tags / per-side flag** — there is no UI for
   it, so a mis-tagged custom exercise cannot be fixed in the app.
 - **Weight stepper passes through 0 on the way back to "—"**, so bodyweight

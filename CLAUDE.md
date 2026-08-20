@@ -23,10 +23,10 @@ muscle group, progressive-overload checks) from clean set-level data.
   anytime. Since push = deploy, this rule now protects the live app too.
 - Service worker (`sw.js`) registers only on non-localhost, so dev never fights
   stale caches. **When deploying, bump `CACHE_VERSION` in sw.js** or phones will
-  serve the old app. (Still `v1` — the first deploy had no prior cache to bust.
-  The next deploy that changes app files needs `v2`.) The fetch handler is
-  network-first, so an online phone gets updates even without the bump; the
-  bump is what protects a phone that was offline.
+  serve the old app. In practice every commit that touches app files bumps it
+  along with `APP_VERSION`, so it is already staged when the go comes. The
+  fetch handler is network-first, so an online phone gets updates even without
+  the bump; the bump is what protects a phone that was offline.
 - **Bump `APP_VERSION` in `js/version.js` with every user-visible change.**
   It shows in the History tab; Taylor uses it to confirm which build he's
   looking at across devices. (Separate from sw.js CACHE_VERSION, which only

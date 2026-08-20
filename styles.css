@@ -425,3 +425,88 @@ button { font-family: inherit; }
   border-top: 1px solid var(--border);
 }
 .insight-empty { color: var(--text-dim); font-size: 0.92rem; padding: 6px 0; }
+
+/* History view toggle */
+.seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: 4px 0 12px;
+}
+.seg-btn {
+  flex: 1;
+  padding: 11px 0;
+  background: var(--surface);
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.seg-btn.selected { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+/* Calendar */
+.cal { margin: 2px 0 10px; }
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.cal-title { font-weight: 600; font-size: 1.05rem; }
+.cal-nav {
+  width: 44px; height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.cal-nav:disabled { opacity: 0.3; cursor: default; }
+.cal-dow, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  margin-bottom: 4px;
+}
+/* Square cells so the grid reads as a calendar at any phone width. */
+.cal-day {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.cal-day.blank { background: none; }
+.cal-day.future { opacity: 0.4; }
+.cal-day.today { border-color: var(--text-dim); }
+.cal-day.trained {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.cal-day.trained.today { border-color: var(--text); }
+.cal-day .num { font-size: 0.95rem; line-height: 1; }
+/* Reserved even when empty, so day numbers line up across the grid. */
+.cal-day .dots { display: flex; gap: 3px; height: 5px; align-items: center; }
+.cal-day .dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.cal-summary {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: 12px;
+}

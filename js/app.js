@@ -17,10 +17,14 @@ const headerDate = document.getElementById('header-date');
 const state = {
   tab: 'today',            // 'today' | 'insights' | 'history'
   screen: 'today',         // 'today' | 'picker' | 'log' | 'create' | 'insights'
-                           //   | 'history' | 'workout-detail' | 'edit-set'
+                           //   | 'history' | 'day-detail' | 'workout-detail'
+                           //   | 'edit-set'
   workout: null,           // today's workout, if started
   exercise: null,          // exercise being logged
   detailWorkout: null,     // workout opened from history
+  detailDate: null,        // training day opened from the calendar
+  detailReturn: 'history', // screen to go back to from a workout detail
+  calMonth: null,          // 'YYYY-MM' shown in the calendar, null = this month
   reps: 10,
   weight: null,
   rpe: null,
@@ -1045,6 +1049,33 @@ async function renderInsights() {
 
 // ---------- History ----------
 
+// History has two shapes: a chronological list and a month grid. Which one you
+// last used sticks per device — it is a viewing preference, not app state, so
+// it lives in localStorage and never touches the training data.
+function historyView() {
+  return localStorage.getItem('historyView') === 'list' ? 'list' : 'calendar';
+}
+
+function monthKeyOf(dateKey) {
+  return dateKey.slice(0, 7);
+}
+
+function shiftMonth(monthKey, delta) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function fmtMonth(monthKey) {
+  const [y, m] = monthKey.split('-').map(Number);
+  return new Date(y, m - 1, 1)
+    .toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 async function renderHistory() {
   headerTitle.textContent = 'History';
   headerDate.textContent = `v${APP_VERSION}`;
@@ -1101,8 +1132,24 @@ async function renderHistory() {
   const exercises = await listExercises();
   const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
 
-  // Group by training day so two sessions on one day read as two sessions
-  // under one date, rather than two unexplained entries with the same header.
+  const toggle = el(`<div class="seg" role="group" aria-label="History view"></div>`);
+  for (const [key, label] of [['calendar', 'Calendar'], ['list', 'List']]) {
+    const on = historyView() === key;
+    const b = el(`<button class="seg-btn">${label}</button>`);
+    b.classList.toggle('selected', on);
+    b.setAttribute('aria-pressed', String(on));
+    b.onclick = () => { localStorage.setItem('historyView', key); render(); };
+    toggle.append(b);
+  }
+  view.append(toggle);
+
+  if (historyView() === 'calendar') await appendCalendar(workouts);
+  else await appendHistoryList(workouts, byId);
+}
+
+// Chronological list, newest first, grouped by training day so two sessions on
+// one day read as two sessions under one date.
+async function appendHistoryList(workouts, byId) {
   const byDay = [];
   for (const w of workouts) {
     let d = byDay.find((x) => x.date === w.date);
@@ -1119,7 +1166,141 @@ async function renderHistory() {
   }
 }
 
-async function appendHistoryItem(w, byId, showTime) {
+// Month grid of training days. A day is marked from the session's DERIVED
+// training day (workout.date), not its clock date, so a 1:25am session marks
+// the night before — the same day it appears under everywhere else.
+async function appendCalendar(workouts) {
+  const allSets = await listSets();
+  const setCount = {};
+  for (const s of allSets) setCount[s.workoutId] = (setCount[s.workoutId] ?? 0) + 1;
+
+  const byDate = {};
+  for (const w of workouts) {
+    const d = (byDate[w.date] ??= { sessions: 0, sets: 0 });
+    d.sessions++;
+    d.sets += setCount[w.id] ?? 0;
+  }
+
+  const today = trainingDayKey();
+  const months = workouts.map((w) => monthKeyOf(w.date)).sort();
+  const firstMonth = months[0];
+  const lastMonth = [months[months.length - 1], monthKeyOf(today)].sort()[1];
+  // Clamped every render, so navigating away and back never lands out of range.
+  if (!state.calMonth) state.calMonth = monthKeyOf(today);
+  if (state.calMonth < firstMonth) state.calMonth = firstMonth;
+  if (state.calMonth > lastMonth) state.calMonth = lastMonth;
+  const month = state.calMonth;
+
+  const cal = el(`
+    <div class="cal">
+      <div class="cal-head">
+        <button class="cal-nav prev" aria-label="Previous month">‹</button>
+        <div class="cal-title"></div>
+        <button class="cal-nav next" aria-label="Next month">›</button>
+      </div>
+      <div class="cal-dow" aria-hidden="true"></div>
+      <div class="cal-grid"></div>
+      <div class="cal-summary"></div>
+    </div>`);
+  cal.querySelector('.cal-title').textContent = fmtMonth(month);
+
+  const prev = cal.querySelector('.prev');
+  const next = cal.querySelector('.next');
+  prev.disabled = month <= firstMonth;
+  next.disabled = month >= lastMonth;
+  prev.onclick = () => { state.calMonth = shiftMonth(month, -1); render(); };
+  next.onclick = () => { state.calMonth = shiftMonth(month, 1); render(); };
+
+  const dow = cal.querySelector('.cal-dow');
+  for (const d of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']) {
+    dow.append(el(`<span>${d[0]}</span>`));
+  }
+
+  const grid = cal.querySelector('.cal-grid');
+  const [y, m] = month.split('-').map(Number);
+  const lead = new Date(y, m - 1, 1).getDay();      // 0 = Sunday
+  const daysInMonth = new Date(y, m, 0).getDate();  // day 0 of next month
+  for (let i = 0; i < lead; i++) grid.append(el(`<div class="cal-day blank"></div>`));
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${month}-${String(day).padStart(2, '0')}`;
+    const info = byDate[key];
+    const cell = el(info
+      ? `<button class="cal-day trained"><span class="num"></span><span class="dots"></span></button>`
+      : `<div class="cal-day"><span class="num"></span><span class="dots"></span></div>`);
+    cell.querySelector('.num').textContent = day;
+    if (key === today) cell.classList.add('today');
+    if (key > today) cell.classList.add('future');
+    if (info) {
+      // Dots only when a day holds more than one session: a single session
+      // needs no marker, the filled cell already says it.
+      if (info.sessions > 1) {
+        const dots = cell.querySelector('.dots');
+        for (let i = 0; i < Math.min(info.sessions, 4); i++) {
+          dots.append(el(`<span class="dot"></span>`));
+        }
+      }
+      cell.setAttribute('aria-label',
+        `${fmtDate(key)} — ${plural(info.sessions, 'session')}, ${plural(info.sets, 'set')}`);
+      cell.onclick = () => openDay(key);
+    }
+    grid.append(cell);
+  }
+
+  const inMonth = Object.entries(byDate).filter(([k]) => monthKeyOf(k) === month);
+  const summary = cal.querySelector('.cal-summary');
+  if (inMonth.length === 0) {
+    summary.textContent = 'No sessions this month';
+  } else {
+    const sessions = inMonth.reduce((n, [, v]) => n + v.sessions, 0);
+    const sets = inMonth.reduce((n, [, v]) => n + v.sets, 0);
+    const extra = sessions === inMonth.length ? '' : ` · ${plural(sessions, 'session')}`;
+    summary.textContent =
+      `${plural(inMonth.length, 'training day')}${extra} · ${plural(sets, 'set')}`;
+  }
+
+  view.append(cal);
+}
+
+// A tapped day with one session opens that session directly — the day screen
+// would otherwise be a single card to tap through.
+async function openDay(dateKey) {
+  const sessions = await workoutsForDay(dateKey);
+  if (sessions.length === 0) return;
+  if (sessions.length === 1) {
+    state.detailWorkout = sessions[0];
+    state.detailReturn = 'history';
+    state.screen = 'workout-detail';
+  } else {
+    state.detailDate = dateKey;
+    state.screen = 'day-detail';
+  }
+  render();
+}
+
+async function renderDayDetail() {
+  const dateKey = state.detailDate;
+  headerTitle.textContent = fmtDate(dateKey);
+  headerDate.textContent = '';
+  view.innerHTML = '';
+
+  const back = el(`<button class="back-link">‹ ${fmtMonth(monthKeyOf(dateKey))}</button>`);
+  back.onclick = () => { state.screen = 'history'; render(); };
+  view.append(back);
+
+  const sessions = await workoutsForDay(dateKey);
+  const exercises = await listExercises();
+  const byId = Object.fromEntries(exercises.map((e) => [e.id, e]));
+
+  if (sessions.length === 0) {
+    view.append(el(`<div class="empty"><p>No sessions on this day.</p></div>`));
+    return;
+  }
+  view.append(el(`<div class="section-label">${plural(sessions.length, 'session')}</div>`));
+  for (const w of sessions) await appendHistoryItem(w, byId, true, 'day-detail');
+}
+
+async function appendHistoryItem(w, byId, showTime, returnTo = 'history') {
     const sets = await setsForWorkout(w.id);
     const names = [...new Set(sets.map((s) => byId[s.exerciseId]?.name).filter(Boolean))];
     const item = el(`
@@ -1134,7 +1315,12 @@ async function appendHistoryItem(w, byId, showTime) {
     item.querySelector('.summary').textContent =
       sets.length === 0 ? 'No sets logged'
         : `${sets.length} set${sets.length === 1 ? '' : 's'} — ${names.join(', ')}`;
-    item.onclick = () => { state.detailWorkout = w; state.screen = 'workout-detail'; render(); };
+    item.onclick = () => {
+      state.detailWorkout = w;
+      state.detailReturn = returnTo;
+      state.screen = 'workout-detail';
+      render();
+    };
     view.append(item);
 }
 
@@ -1144,8 +1330,11 @@ async function renderWorkoutDetail() {
   headerDate.textContent = '';
   view.innerHTML = '';
 
-  const back = el(`<button class="back-link">‹ History</button>`);
-  back.onclick = () => { state.screen = 'history'; render(); };
+  // Back goes where you came from: the day screen when the day held more than
+  // one session, otherwise straight to History.
+  const fromDay = state.detailReturn === 'day-detail';
+  const back = el(`<button class="back-link">‹ ${fromDay ? fmtDate(w.date) : 'History'}</button>`);
+  back.onclick = () => { state.screen = fromDay ? 'day-detail' : 'history'; render(); };
   view.append(back);
 
   const sets = await setsForWorkout(w.id);
@@ -1220,6 +1409,7 @@ function render() {
     return renderInsights();
   }
   if (state.screen === 'workout-detail') return renderWorkoutDetail();
+  if (state.screen === 'day-detail') return renderDayDetail();
   state.screen = 'history';
   return renderHistory();
 }

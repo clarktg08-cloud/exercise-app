@@ -6,7 +6,8 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.5.0**, on `master`, pushed and deployed.
+- **App version v0.6.0**, on `master`, committed locally — **not pushed, so
+  the live site is still v0.5.0.** Pushing is a deploy; it needs Taylor's go.
 - **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
   https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
   Verified live: service worker registers and activates, all 9 assets cached
@@ -26,13 +27,22 @@ first; this file is just the current state between them.
   JSON export + import, Insights tab (weekly sets/muscle, Epley e1RM),
   "Last time" line showing the full previous session with its date,
   per-side sets (both/left/right), picker filters by type + muscle,
-  rest timer with a reps-based suggested target, and **sessions**.
+  rest timer with a reps-based suggested target, **sessions**, and a
+  **History calendar**.
 - **Sessions (v0.5.0)** — a workout is a SESSION, not a calendar day.
   Training day starts at **4am** (`trainingDayKey`), a gap over **3 hours**
   (`SESSION_GAP_MS`) starts a new session, and `getActiveWorkout()` returns
   the live one. Timestamps are never rewritten; the day is derived, so the
   boundary can be changed later without corrupting history.
   `migrateSessions()` runs on every startup and is idempotent by design.
+- **History calendar (v0.6.0)** — History has a Calendar / List toggle, stored
+  in localStorage under `historyView` (per device, defaults to Calendar). The
+  month grid marks a day from `workout.date`, the DERIVED training day, so a
+  1:25am session marks the night before, exactly as it reads everywhere else.
+  Dots appear only when a day holds more than one session. Tapping a day with
+  one session opens that session directly; two or more opens a day screen
+  first, and the session's back link then returns there. Month navigation is
+  clamped between the earliest session and the current month.
 
 ## Running / testing
 
@@ -57,6 +67,10 @@ first; this file is just the current state between them.
   of RPE. Not bought yet. Model as a range, never a single invented number,
   and keep bands out of est-1RM (see ROADMAP).
 - Rest timer: currently counts up forever; option to hide after long gaps.
+- Calendar cells mark a trained day but say nothing about what was trained.
+  Colour-coding by muscle group or session volume was NOT built — it would
+  need a rule for what a colour means, and inventing one is exactly what
+  CLAUDE.md forbids. Worth asking him what he would want a colour to say.
 - Planks are excluded from weekly sets-per-muscle (they're hold-type);
   arguably they should count toward core. Flagged to him, undecided.
 - He'll send a better photo of his single-loop stretch strap sometime
