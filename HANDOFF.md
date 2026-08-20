@@ -6,8 +6,7 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.6.0**, on `master`, committed locally — **not pushed, so
-  the live site is still v0.5.0.** Pushing is a deploy; it needs Taylor's go.
+- **App version v0.6.1**, on `master`, pushed and live.
 - **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
   https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
   Verified live: service worker registers and activates, all 9 assets cached
@@ -43,6 +42,14 @@ first; this file is just the current state between them.
   one session opens that session directly; two or more opens a day screen
   first, and the session's back link then returns there. Month navigation is
   clamped between the earliest session and the current month.
+
+- **v0.6.1 fixed a dead control from v0.5.0:** the "Earlier today" cards on the
+  Today screen set `state.screen = 'workout-detail'`, but `render()` forces the
+  screen back to `'today'` for that tab, so tapping one did nothing at all.
+  The Today branch now routes to the session detail and `detailReturn` resolves
+  against a map ('today' | 'day-detail' | 'history'). Lesson for next time: a
+  click handler that only sets `state.screen` is dead unless `render()`'s branch
+  for the current TAB handles that screen.
 
 ## Running / testing
 

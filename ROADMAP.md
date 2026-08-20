@@ -58,6 +58,12 @@ order and scope; this file just keeps sessions on the same page.
 
 ## Agreed next — after v0.6.0
 
+- **No way to delete a session.** `deleteSet` exists; there is no
+  `deleteWorkout`. So anything imported or mis-started is permanent short of
+  wiping site data, which would take real history with it. This is why Taylor
+  decided (2026-08-20) NOT to import test data to see the calendar populated —
+  fake sessions would be unremovable and would feed the weekly set counts and
+  est-1RM trend as though they were real training.
 - **Editing an exercise's muscle tags / per-side flag** — there is no UI for
   it, so a mis-tagged custom exercise cannot be fixed in the app.
 - **Weight stepper passes through 0 on the way back to "—"**, so bodyweight
