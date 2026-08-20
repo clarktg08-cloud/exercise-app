@@ -515,9 +515,12 @@ function mmss(total) {
   return `${m}:${s}`;
 }
 
-// Counts DOWN to the rest target, then keeps counting up past it as overtime,
-// so the number stays useful either way. Nothing is enforced — start the next
-// set whenever.
+// Counts UP, the way a rest clock normally reads, with the suggested target
+// shown beside it. Reaching the target changes how it looks rather than
+// interrupting anything; the optional alert is a vibration, never a sound,
+// because a phone beeping in a gym is its own problem.
+const alarmOn = () => localStorage.getItem('restAlarm') === '1';
+
 let restTicker = null;
 
 async function updateRestTimer(restEl) {
@@ -533,11 +536,22 @@ async function updateRestTimer(restEl) {
   main.append(el(`<span class="rest-label">Rest</span>`), time);
 
   const ctl = el(`<div class="rest-target-ctl"></div>`);
+  const alarm = el(`<button class="rest-alarm" aria-label="toggle rest alert"></button>`);
   const down = el(`<button class="rest-adj" aria-label="shorter rest">−</button>`);
   const targetLabel = el(`<button class="rest-target" aria-label="reset rest target to suggested"></button>`);
   const up = el(`<button class="rest-adj" aria-label="longer rest">+</button>`);
-  ctl.append(down, targetLabel, up);
+  ctl.append(alarm, down, targetLabel, up);
   restEl.append(main, ctl);
+
+  const paintAlarm = () => {
+    alarm.textContent = alarmOn() ? '🔔' : '🔕';
+    alarm.classList.toggle('on', alarmOn());
+  };
+  alarm.onclick = () => {
+    localStorage.setItem('restAlarm', alarmOn() ? '0' : '1');
+    paintAlarm();
+  };
+  paintAlarm();
 
   const adjust = async (delta) => {
     const next = Math.min(600, Math.max(15, restTargetSec(ex, last) + delta));
@@ -556,13 +570,20 @@ async function updateRestTimer(restEl) {
     await updateRestTimer(restEl);
   };
 
+  let alerted = false;
   const tick = () => {
     const target = restTargetSec(state.exercise, last);
     const secs = Math.max(0, Math.floor((Date.now() - last.loggedAt) / 1000));
-    const remaining = target - secs;
-    time.textContent = remaining >= 0 ? mmss(remaining) : `+${mmss(remaining)}`;
-    restEl.classList.toggle('over', remaining < 0);
-    targetLabel.textContent = `target ${mmss(target)}`;
+    time.textContent = mmss(secs);
+    const ready = secs >= target;
+    restEl.classList.toggle('ready', ready);
+    targetLabel.textContent = ready ? `${mmss(target)} · ready` : `target ${mmss(target)}`;
+    if (ready && !alerted) {
+      alerted = true;
+      // Vibration only fires while the page is actually in front — if the
+      // screen is off or the app is backgrounded, the OS drops it.
+      if (alarmOn() && navigator.vibrate) navigator.vibrate([180, 110, 180]);
+    }
   };
   tick();
   restEl.hidden = false;

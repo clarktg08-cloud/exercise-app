@@ -284,7 +284,7 @@ button { font-family: inherit; }
    The [hidden] guard is required — display:flex would otherwise override the
    hidden attribute and show an empty timer before the first set is logged. */
 .rest-timer {
-  color: var(--accent);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   margin: 10px 0 16px;
   display: flex;
@@ -295,9 +295,20 @@ button { font-family: inherit; }
 }
 .rest-timer[hidden] { display: none; }
 .rest-main { display: flex; align-items: baseline; gap: 12px; }
-/* Past the target the clock keeps running, in muted text so it reads as
-   "you're over" rather than "you're late" — nothing here is enforced. */
-.rest-timer.over { color: var(--text-dim); }
+/* At the target the clock keeps counting up and simply lights up: a state
+   change you can catch at a glance, not an interruption. */
+.rest-timer.ready { color: var(--accent); }
+.rest-timer.ready .rest-target { color: var(--accent); }
+.rest-alarm {
+  background: none;
+  border: none;
+  padding: 4px;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.45;
+}
+.rest-alarm.on { opacity: 1; }
 .rest-target-ctl {
   display: flex;
   align-items: center;
