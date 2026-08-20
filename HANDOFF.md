@@ -40,6 +40,11 @@ first; this file is just the current state between them.
   one, so the default drifts low over time. Candidates: best set of that
   session, or first set. Taylor is deciding by feel once he's using the app
   for real — don't change it unprompted.
+- **Warm-up flag** — parked, not rejected (see ROADMAP "Decided"). Taylor logs
+  warm-ups as normal sets; a flag would mainly be for fixing a mis-tap.
+- **Bands with rated tension** — his preferred fix for band intensity instead
+  of RPE. Not bought yet. Model as a range, never a single invented number,
+  and keep bands out of est-1RM (see ROADMAP).
 - Rest timer: currently counts up forever; option to hide after long gaps.
 - Planks are excluded from weekly sets-per-muscle (they're hold-type);
   arguably they should count toward core. Flagged to him, undecided.

@@ -763,12 +763,14 @@ async function renderInsights() {
   const weekCard = el(`
     <div class="card">
       <div class="insight-title">Training sets per muscle group this week</div>
-      <div class="insight-sub">Week of ${weekLabel}. Each set counts toward every muscle its
-        exercise is tagged with. Stretches and timed holds aren't counted — the research
-        below is about resistance-training sets.</div>
+      <div class="insight-sub">Week of ${weekLabel}. Every logged set counts once toward each
+        muscle its exercise is tagged with. Stretches and timed holds are excluded — the
+        research below is about resistance-training sets.</div>
       <div class="insight-rows"></div>
       <div class="insight-note">Research on muscle growth most consistently supports
-        ~10–20 hard sets per muscle per week; strength can progress on less.</div>
+        ~10–20 <strong>hard</strong> sets per muscle per week — sets taken close to failure.
+        This count includes every set logged, warm-ups included, so read it as an upper
+        bound rather than a like-for-like comparison. Strength can progress on less.</div>
     </div>`);
   const rows = weekCard.querySelector('.insight-rows');
   const entries = Object.entries(weekCounts).sort((a, b) => b[1] - a[1]);

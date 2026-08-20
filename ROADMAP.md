@@ -30,7 +30,35 @@ order and scope; this file just keeps sessions on the same page.
    progressive-overload flags, RPE trends for unloadable work. Same science
    rules: evidence or it doesn't ship.
 
+## Decided (2026-08-20) — intensity, warm-ups, bands
+
+- **Don't build the science layer on RPE.** Taylor's call: RPE stays in the
+  app and stays optional, but he doesn't want to guess how hard a rubber band
+  was, so no metric should depend on it. Any "hard set" rule keyed to an RPE
+  threshold is out — that would be inventing a cutoff.
+- **Warm-up sets get logged like any other set.** A warm-up is usually the
+  same movement at lower intensity, "but not always", so it is real training
+  data and not a separate category. A warm-up flag is *parked, not rejected* —
+  Taylor sees it mainly as a way to fix a mis-tap, and is wary of adding a
+  button that can itself be tapped wrong.
+- **Consequence, already shipped in v0.3.5:** weekly sets-per-muscle counts
+  every logged set, warm-ups included, so the card now says so and frames the
+  10–20 hard-set research as an upper-bound comparison rather than like-for-like.
+- **Band tension by colour is the preferred direction for band intensity**
+  (hypothetical — he has not bought a set). See parked ideas for how to model
+  it honestly.
+
 ## Parked ideas (discussed, not scheduled)
+
+- **Bands with rated tension.** Replace "no load + RPE" with the band's stated
+  resistance. Modelling rules if this happens: band resistance is a *range*,
+  not a number — tension rises with elongation, and manufacturers publish a
+  span (e.g. 15–35 lb). Store the band identity and its rated range, never a
+  single invented poundage. Bands should stay OUT of Epley est-1RM, which
+  assumes a constant external load; a rising-tension band breaks that
+  assumption. What rated bands would buy honestly: progression tracking
+  (green → blue is a real, recordable step up) and volume that isn't
+  guesswork.
 
 - **Social / friends** (Taylor is interested for "down the road, when it's
   more fully built"; requires accounts + server, so it rides on the sync
