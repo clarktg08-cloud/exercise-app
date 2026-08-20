@@ -48,6 +48,17 @@ order and scope; this file just keeps sessions on the same page.
   (hypothetical — he has not bought a set). See parked ideas for how to model
   it honestly.
 
+## Agreed next — after v0.5.0
+
+- **Calendar view for History** — month grid marking training days, tap a day
+  for its sessions. Taylor asked for this; v0.5.0 delivered the session model
+  and day grouping underneath it, the grid itself is not built.
+- **Editing an exercise's muscle tags / per-side flag** — there is no UI for
+  it, so a mis-tagged custom exercise cannot be fixed in the app.
+- **Weight stepper passes through 0 on the way back to "—"**, so bodyweight
+  work can end up logged as `0 lb` (Taylor did this on Push-Ups). Decide
+  whether unloaded exercises should skip 0 entirely.
+
 ## Parked ideas (discussed, not scheduled)
 
 - **Bands with rated tension.** Replace "no load + RPE" with the band's stated

@@ -1,4 +1,4 @@
-# Session handoff — 2026-08-19
+# Session handoff — 2026-08-20
 
 For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
@@ -6,30 +6,41 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.3.2**, on `master`, pushed to
-  `clarktg08-cloud/exercise-app` (public).
+- **App version v0.5.0**, on `master`, pushed and deployed.
 - **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
   https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
   Verified live: service worker registers and activates, all 9 assets cached
-  under the `/exercise-app/` scope, correct MIME types, v0.3.2 showing.
+  under the `/exercise-app/` scope, correct MIME types.
   **Pushing to `master` redeploys**, so treat any push as a deploy and get
   Taylor's go first.
-- Real training data now lives at that origin in his phone's browser. Changing
-  hosts (e.g. to Cloudflare Pages) would strand it — migrate via JSON
-  export/import, never by clearing storage.
+- Real training data lives in **browser storage per device**. The phone and the
+  desktop each hold their OWN IndexedDB at the same URL — there is no sync yet,
+  so they diverge the moment both are used. JSON export/import is the only
+  bridge. Changing hosts would strand data the same way. Never advise clearing
+  storage.
+- Taylor now also uses it on desktop (installable PWA via Chrome/Edge). Ask
+  which device a report of "missing data" came from before assuming a bug.
 - Built so far: logging (weighted / band-bodyweight / stretch-hold types,
   1–10 RPE, 2.5 lb steps, tap-to-type values), edit/delete any past set,
   exercise form notes, rest timer, repeat past workout (planned list),
   JSON export + import, Insights tab (weekly sets/muscle, Epley e1RM),
-  "Last time" line showing the full previous session with its date.
+  "Last time" line showing the full previous session with its date,
+  per-side sets (both/left/right), picker filters by type + muscle,
+  rest timer with a reps-based suggested target, and **sessions**.
+- **Sessions (v0.5.0)** — a workout is a SESSION, not a calendar day.
+  Training day starts at **4am** (`trainingDayKey`), a gap over **3 hours**
+  (`SESSION_GAP_MS`) starts a new session, and `getActiveWorkout()` returns
+  the live one. Timestamps are never rewritten; the day is derived, so the
+  boundary can be changed later without corrupting history.
+  `migrateSessions()` runs on every startup and is idempotent by design.
 
 ## Running / testing
 
 - Preview: `.claude/launch.json` entry `exercise-app` (npx serve, port 8123).
 - The in-app Browser pane wipes IndexedDB whenever the pane restarts —
   fine for testing, but it means test data disappears and **the pane is
-  never where real training data lives.** Real data will live on the
-  deployed phone app (or a normal desktop browser) once deployed.
+  never where real training data lives.** Real data lives on Taylor's phone
+  and desktop browsers at the deployed URL.
 - Follow CLAUDE.md testing rules: null-weight band sets, weight 0,
   apostrophe names, getComputedStyle for visibility.
 
