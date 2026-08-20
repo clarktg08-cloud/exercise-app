@@ -1,2 +1,2 @@
 // Bump with every user-visible change (see CLAUDE.md). Shown in the History tab.
-export const APP_VERSION = '0.3.5';
+export const APP_VERSION = '0.4.0';

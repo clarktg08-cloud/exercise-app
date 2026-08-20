@@ -216,6 +216,9 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .pick-chip.selected { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+/* Filter chips sit above a long list, so they stay compact. */
+.pick-chip.small { padding: 6px 11px; font-size: 0.85rem; }
+.picker-filters { margin: 8px 0 4px; }
 
 .set-list { margin-top: 14px; }
 .set-item {

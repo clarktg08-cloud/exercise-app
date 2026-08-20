@@ -11,9 +11,14 @@
 //       side(s) were trained, defaulting to both. Volume still counts one
 //       logged set as one set for the muscle — sides are not doubled.
 
+// calves and shins are deliberately separate groups: plantarflexion
+// (gastrocnemius / soleus) and dorsiflexion (tibialis anterior) are
+// antagonists on opposite sides of the lower leg. Tagging both as "calves"
+// would credit the calves for shin work and make the weekly set count
+// meaningless for either.
 export const MUSCLE_GROUPS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'hips', 'core',
+  'quads', 'hamstrings', 'glutes', 'calves', 'shins', 'hips', 'core',
 ];
 
 export const SEED_EXERCISES = [
@@ -25,7 +30,12 @@ export const SEED_EXERCISES = [
   { name: 'Lunge',                muscles: ['quads', 'glutes'],        load: 'weighted', perSide: true },
   { name: 'Leg Extension',        muscles: ['quads'],                  load: 'weighted' },
   { name: 'Leg Curl',             muscles: ['hamstrings'],             load: 'weighted' },
+  // Lower leg. Standing calf raise biases gastrocnemius (knee straight),
+  // seated biases soleus (knee bent); tibialis raise is the dorsiflexion
+  // antagonist, the one runners usually skip.
   { name: 'Calf Raise',           muscles: ['calves'],                 load: 'weighted' },
+  { name: 'Seated Calf Raise',    muscles: ['calves'],                 load: 'weighted' },
+  { name: 'Tibialis Raise',       muscles: ['shins'],                  load: 'unloaded' },
   { name: 'Hip Thrust',           muscles: ['glutes', 'hamstrings'],   load: 'weighted' },
   { name: 'Glute Bridge',         muscles: ['glutes'],                 load: 'unloaded' },
   { name: '4-Way Hip (band)',     muscles: ['hips', 'glutes'],         load: 'unloaded', perSide: true },

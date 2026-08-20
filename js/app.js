@@ -30,6 +30,8 @@ const state = {
   createLoad: 'weighted',
   createMuscles: new Set(),
   createPerSide: false,
+  filterLoad: null,        // picker filter: null | 'weighted' | 'unloaded' | 'hold'
+  filterMuscle: null,      // picker filter: null | a MUSCLE_GROUPS entry
   editSet: null,           // set being edited
   editReturn: 'today',     // screen to go back to after editing
 };
@@ -201,10 +203,47 @@ async function renderPicker() {
   view.append(search);
 
   const listEl = el(`<div id="picker-list"></div>`);
+  view.append(pickerFilters(listEl));
   view.append(listEl);
 
   await renderPickerList(listEl, state.search);
   search.focus();
+}
+
+// Filter chips above the picker list: one row for how the exercise is loaded,
+// one for muscle group. Both are single-select with an "All" escape, and they
+// combine with the search box rather than replacing it.
+function pickerFilters(listEl) {
+  const wrap = el(`<div class="picker-filters"></div>`);
+
+  const chipRow = (options, current, onPick) => {
+    const rowEl = el(`<div class="chip-grid"></div>`);
+    for (const o of options) {
+      const chip = el(`<button class="pick-chip small"></button>`);
+      chip.textContent = o.label;
+      if (current === o.key) chip.classList.add('selected');
+      chip.onclick = () => {
+        onPick(o.key);
+        for (const c of rowEl.children) c.classList.remove('selected');
+        chip.classList.add('selected');
+        renderPickerList(listEl, state.search);
+      };
+      rowEl.append(chip);
+    }
+    return rowEl;
+  };
+
+  wrap.append(chipRow(
+    [{ key: null, label: 'All types' }, ...LOAD_TYPES],
+    state.filterLoad,
+    (k) => { state.filterLoad = k; }));
+
+  wrap.append(chipRow(
+    [{ key: null, label: 'All muscles' }, ...MUSCLE_GROUPS.map((m) => ({ key: m, label: m }))],
+    state.filterMuscle,
+    (k) => { state.filterMuscle = k; }));
+
+  return wrap;
 }
 
 async function renderPickerList(listEl, query) {
@@ -225,15 +264,25 @@ async function renderPickerList(listEl, query) {
     return r;
   };
 
-  if (!q && recents.length) {
+  const filtered = state.filterLoad !== null || state.filterMuscle !== null;
+
+  // Recents are only useful as a shortcut on the unfiltered list; showing
+  // them alongside a filter would contradict the filter.
+  if (!q && !filtered && recents.length) {
     listEl.append(el(`<div class="section-label">Recent</div>`));
     for (const id of recents) if (byId[id]) listEl.append(row(byId[id]));
   }
 
-  const matches = exercises.filter((e) =>
-    !q || e.name.toLowerCase().includes(q) || e.muscles.some((m) => m.includes(q)));
+  const matches = exercises.filter((e) => {
+    if (state.filterLoad !== null && e.load !== state.filterLoad) return false;
+    if (state.filterMuscle !== null && !e.muscles.includes(state.filterMuscle)) return false;
+    return !q || e.name.toLowerCase().includes(q) || e.muscles.some((m) => m.includes(q));
+  });
 
-  listEl.append(el(`<div class="section-label">${q ? 'Results' : 'All exercises'}</div>`));
+  listEl.append(el(`<div class="section-label">${q || filtered ? 'Results' : 'All exercises'}</div>`));
+  if (matches.length === 0) {
+    listEl.append(el(`<div style="color:var(--text-dim);padding:6px 4px">Nothing matches those filters.</div>`));
+  }
   for (const ex of matches) listEl.append(row(ex));
 
   const create = el(`<button class="btn secondary" style="margin-top:12px"></button>`);
