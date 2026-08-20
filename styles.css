@@ -288,11 +288,43 @@ button { font-family: inherit; }
   font-variant-numeric: tabular-nums;
   margin: 10px 0 16px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
   line-height: 1;
 }
 .rest-timer[hidden] { display: none; }
+.rest-main { display: flex; align-items: baseline; gap: 12px; }
+/* Past the target the clock keeps running, in muted text so it reads as
+   "you're over" rather than "you're late" — nothing here is enforced. */
+.rest-timer.over { color: var(--text-dim); }
+.rest-target-ctl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+/* Looks like a label, behaves as a reset button. */
+.rest-target {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.rest-adj {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
 .rest-label {
   font-size: 0.78rem;
   font-weight: 600;

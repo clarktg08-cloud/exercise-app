@@ -489,22 +489,80 @@ async function renderLog() {
   await renderLoggedSets(setList);
 }
 
-// Time since the most recent set in today's workout, ticking every second.
+// Rest target suggested from the reps just performed. This is a coaching rule
+// of thumb, not a measurement — assuming working sets, reps track load, and
+// heavier work needs longer to recover. Ranges behind these numbers: roughly
+// 3–5 min for heavy low-rep work, 2–3 min for moderate. Shorter rest is only
+// appropriate when local endurance is the actual goal; it does not help
+// hypertrophy, which is where the old 30–90 s advice went wrong.
+// Any value the user sets on an exercise wins over this.
+function suggestedRestSec(ex, lastSet) {
+  if (ex?.load === 'hold') return 30;
+  const reps = lastSet?.reps;
+  if (!reps) return 150;
+  if (reps <= 5) return 180;
+  if (reps <= 12) return 150;
+  return 120;
+}
+
+function restTargetSec(ex, lastSet) {
+  return ex?.restSec ?? suggestedRestSec(ex, lastSet);
+}
+
+function mmss(total) {
+  const m = Math.floor(Math.abs(total) / 60);
+  const s = String(Math.abs(total) % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Counts DOWN to the rest target, then keeps counting up past it as overtime,
+// so the number stays useful either way. Nothing is enforced — start the next
+// set whenever.
 let restTicker = null;
 
 async function updateRestTimer(restEl) {
   clearInterval(restTicker);
   const sets = await setsForWorkout(state.workout.id);
   if (sets.length === 0) { restEl.hidden = true; return; }
-  const lastAt = Math.max(...sets.map((s) => s.loggedAt));
+  const last = sets.reduce((a, b) => (b.loggedAt > a.loggedAt ? b : a));
+  const ex = state.exercise;
+
   restEl.innerHTML = '';
+  const main = el(`<div class="rest-main"></div>`);
   const time = el(`<span class="rest-time"></span>`);
-  restEl.append(el(`<span class="rest-label">Rest</span>`), time);
+  main.append(el(`<span class="rest-label">Rest</span>`), time);
+
+  const ctl = el(`<div class="rest-target-ctl"></div>`);
+  const down = el(`<button class="rest-adj" aria-label="shorter rest">−</button>`);
+  const targetLabel = el(`<button class="rest-target" aria-label="reset rest target to suggested"></button>`);
+  const up = el(`<button class="rest-adj" aria-label="longer rest">+</button>`);
+  ctl.append(down, targetLabel, up);
+  restEl.append(main, ctl);
+
+  const adjust = async (delta) => {
+    const next = Math.min(600, Math.max(15, restTargetSec(ex, last) + delta));
+    const updated = await updateExercise({ ...ex, restSec: next });
+    state.exercise = updated;
+    await updateRestTimer(restEl);
+  };
+  down.onclick = () => adjust(-15);
+  up.onclick = () => adjust(15);
+  // Tapping the target clears your override and returns to the suggestion,
+  // so a mis-tap on an exercise isn't permanent.
+  targetLabel.onclick = async () => {
+    if (state.exercise?.restSec === undefined) return;
+    const { restSec, ...rest } = state.exercise;
+    state.exercise = await updateExercise(rest);
+    await updateRestTimer(restEl);
+  };
+
   const tick = () => {
-    const secs = Math.max(0, Math.floor((Date.now() - lastAt) / 1000));
-    const m = Math.floor(secs / 60);
-    const s = String(secs % 60).padStart(2, '0');
-    time.textContent = `${m}:${s}`;
+    const target = restTargetSec(state.exercise, last);
+    const secs = Math.max(0, Math.floor((Date.now() - last.loggedAt) / 1000));
+    const remaining = target - secs;
+    time.textContent = remaining >= 0 ? mmss(remaining) : `+${mmss(remaining)}`;
+    restEl.classList.toggle('over', remaining < 0);
+    targetLabel.textContent = `target ${mmss(target)}`;
   };
   tick();
   restEl.hidden = false;

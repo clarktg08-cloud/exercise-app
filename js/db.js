@@ -3,7 +3,9 @@
 //
 // Stores:
 //   exercises: { id, name, muscles[], load ('weighted'|'unloaded'|'hold'),
-//                increment, isCustom, createdAt, notes?, perSide? }
+//                increment, isCustom, createdAt, notes?, perSide?, restSec? }
+//   restSec: the user's own rest target for this exercise, in seconds. Absent
+//            means "use the suggested default from the reps just logged".
 //   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes,
 //                plannedExerciseIds? (from "repeat workout"; logged sets are
 //                the source of truth — planned is just a to-do list) }

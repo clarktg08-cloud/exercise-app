@@ -1,6 +1,6 @@
 // Service worker — only registered on the deployed site (see index.html).
 // IMPORTANT: bump CACHE_VERSION with every deploy or phones keep the old app.
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = `exercise-app-${CACHE_VERSION}`;
 const ASSETS = [
   '.', 'index.html', 'styles.css', 'manifest.webmanifest',
