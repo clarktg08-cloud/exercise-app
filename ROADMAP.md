@@ -18,9 +18,11 @@ order and scope; this file just keeps sessions on the same page.
 
 ## Agreed next (order not final)
 
-1. **Deploy to phone** — GitHub repo + Cloudflare Pages. **Waits for Taylor's
-   explicit go.** First deploy: bump sw.js CACHE_VERSION, test installed PWA,
-   sample the live URL several times.
+1. ~~**Deploy to phone**~~ — **DONE 2026-08-19**, GitHub Pages instead of
+   Cloudflare Pages (nothing to click through on a phone; `gh` was already
+   authenticated). Live at https://clarktg08-cloud.github.io/exercise-app/.
+   Cloudflare Pages remains an option if a custom domain is ever wanted, but
+   the origin change would strand existing data — export/import first.
 2. **Cloud sync (Cloudflare D1)** — local-first stays; D1 becomes the shared
    source of truth across phone/desktop. Auth token in Cloudflare secrets,
    never in the repo. Export/import (done) is the manual fallback.

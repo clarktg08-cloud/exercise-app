@@ -11,14 +11,22 @@ muscle group, progressive-overload checks) from clean set-level data.
   phone-driven edits depend on it staying simple.
 - Local preview: `npx serve -l 8123 .` (or the `exercise-app` entry in
   `.claude/launch.json`). Nothing needs installing globally.
-- **Deploy target (not set up yet): Cloudflare Pages via GitHub.** There is no
-  remote yet. When it exists: `git fetch` before editing (Taylor works from
-  desktop + phone concurrently; sessions have collided on other projects), and
-  **never push or deploy without Taylor explicitly saying go.** Local commits
-  are fine anytime.
+- **Deployed: GitHub Pages at https://clarktg08-cloud.github.io/exercise-app/**
+  (public repo `clarktg08-cloud/exercise-app`, served from branch `master`,
+  root). Pushing to `master` rebuilds the live site within a minute or two —
+  **a push IS a deploy here.** Cloudflare Pages was the original plan and is
+  still an option later; moving hosts changes the origin, which means Taylor's
+  IndexedDB data does NOT follow and must be moved by JSON export/import.
+- **`git fetch` before editing** — Taylor works from desktop + phone
+  concurrently and sessions have collided on other projects.
+- **Never push without Taylor explicitly saying go.** Local commits are fine
+  anytime. Since push = deploy, this rule now protects the live app too.
 - Service worker (`sw.js`) registers only on non-localhost, so dev never fights
   stale caches. **When deploying, bump `CACHE_VERSION` in sw.js** or phones will
-  serve the old app.
+  serve the old app. (Still `v1` — the first deploy had no prior cache to bust.
+  The next deploy that changes app files needs `v2`.) The fetch handler is
+  network-first, so an online phone gets updates even without the bump; the
+  bump is what protects a phone that was offline.
 - **Bump `APP_VERSION` in `js/version.js` with every user-visible change.**
   It shows in the History tab; Taylor uses it to confirm which build he's
   looking at across devices. (Separate from sw.js CACHE_VERSION, which only

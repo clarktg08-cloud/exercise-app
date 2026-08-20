@@ -6,11 +6,17 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.3.2**, all work committed locally on `master`
-  (latest: `013110a`). Working tree clean. **No git remote exists yet.**
-- Nothing has ever been pushed or deployed. **Deploy (GitHub + Cloudflare
-  Pages) is agreed as the next big step but WAITS for Taylor's explicit
-  "go" — do not create the remote or deploy without it.**
+- **App version v0.3.2**, on `master`, pushed to
+  `clarktg08-cloud/exercise-app` (public).
+- **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
+  https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
+  Verified live: service worker registers and activates, all 9 assets cached
+  under the `/exercise-app/` scope, correct MIME types, v0.3.2 showing.
+  **Pushing to `master` redeploys**, so treat any push as a deploy and get
+  Taylor's go first.
+- Real training data now lives at that origin in his phone's browser. Changing
+  hosts (e.g. to Cloudflare Pages) would strand it — migrate via JSON
+  export/import, never by clearing storage.
 - Built so far: logging (weighted / band-bodyweight / stretch-hold types,
   1–10 RPE, 2.5 lb steps, tap-to-type values), edit/delete any past set,
   exercise form notes, rest timer, repeat past workout (planned list),
