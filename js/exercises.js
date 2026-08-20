@@ -6,6 +6,10 @@
 // Weight increment is a uniform 2.5 lb (the smallest plate jump Taylor can
 // actually load); exercises keep an increment field in the DB for per-exercise
 // overrides later, but seeds don't set one.
+// perSide: the movement is trained one side at a time, so a logged rep count
+//       means reps PER SIDE, not total. Sets on these exercises record which
+//       side(s) were trained, defaulting to both. Volume still counts one
+//       logged set as one set for the muscle — sides are not doubled.
 
 export const MUSCLE_GROUPS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
@@ -18,13 +22,13 @@ export const SEED_EXERCISES = [
   { name: 'Leg Press',            muscles: ['quads', 'glutes'],        load: 'weighted' },
   { name: 'Deadlift',             muscles: ['hamstrings', 'glutes', 'back'], load: 'weighted' },
   { name: 'Romanian Deadlift',    muscles: ['hamstrings', 'glutes'],   load: 'weighted' },
-  { name: 'Lunge',                muscles: ['quads', 'glutes'],        load: 'weighted' },
+  { name: 'Lunge',                muscles: ['quads', 'glutes'],        load: 'weighted', perSide: true },
   { name: 'Leg Extension',        muscles: ['quads'],                  load: 'weighted' },
   { name: 'Leg Curl',             muscles: ['hamstrings'],             load: 'weighted' },
   { name: 'Calf Raise',           muscles: ['calves'],                 load: 'weighted' },
   { name: 'Hip Thrust',           muscles: ['glutes', 'hamstrings'],   load: 'weighted' },
   { name: 'Glute Bridge',         muscles: ['glutes'],                 load: 'unloaded' },
-  { name: '4-Way Hip (band)',     muscles: ['hips', 'glutes'],         load: 'unloaded' },
+  { name: '4-Way Hip (band)',     muscles: ['hips', 'glutes'],         load: 'unloaded', perSide: true },
   { name: 'Band Lateral Walk',    muscles: ['hips', 'glutes'],         load: 'unloaded' },
 
   // Push
@@ -41,7 +45,7 @@ export const SEED_EXERCISES = [
   { name: 'Pull-Up',              muscles: ['back', 'biceps'],         load: 'unloaded' },
   { name: 'Lat Pulldown',         muscles: ['back', 'biceps'],         load: 'weighted' },
   { name: 'Seated Row',           muscles: ['back', 'biceps'],         load: 'weighted' },
-  { name: 'Dumbbell Row',         muscles: ['back', 'biceps'],         load: 'weighted' },
+  { name: 'Dumbbell Row',         muscles: ['back', 'biceps'],         load: 'weighted', perSide: true },
   { name: 'Face Pull',            muscles: ['shoulders', 'back'],      load: 'weighted' },
   { name: 'Band Pull-Apart',      muscles: ['shoulders', 'back'],      load: 'unloaded' },
   { name: 'Biceps Curl',          muscles: ['biceps'],                 load: 'weighted' },
@@ -53,10 +57,10 @@ export const SEED_EXERCISES = [
   { name: 'Back Extension',       muscles: ['back', 'glutes'],         load: 'unloaded' },
 
   // Stretches (timed holds; band/wall variants welcome as custom exercises)
-  { name: 'Hamstring Stretch',        muscles: ['hamstrings'],      load: 'hold' },
-  { name: 'Quad Stretch',             muscles: ['quads'],           load: 'hold' },
-  { name: 'Calf Stretch (wall)',      muscles: ['calves'],          load: 'hold' },
-  { name: 'Hip Flexor Stretch',       muscles: ['hips'],            load: 'hold' },
-  { name: 'Figure-4 Glute Stretch',   muscles: ['glutes', 'hips'],  load: 'hold' },
+  { name: 'Hamstring Stretch',        muscles: ['hamstrings'],      load: 'hold', perSide: true },
+  { name: 'Quad Stretch',             muscles: ['quads'],           load: 'hold', perSide: true },
+  { name: 'Calf Stretch (wall)',      muscles: ['calves'],          load: 'hold', perSide: true },
+  { name: 'Hip Flexor Stretch',       muscles: ['hips'],            load: 'hold', perSide: true },
+  { name: 'Figure-4 Glute Stretch',   muscles: ['glutes', 'hips'],  load: 'hold', perSide: true },
   { name: 'Chest Stretch (doorway)',  muscles: ['chest'],           load: 'hold' },
 ];

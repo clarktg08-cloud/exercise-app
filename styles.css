@@ -302,6 +302,14 @@ button { font-family: inherit; }
   font-weight: 700;
 }
 
+/* Side chips reuse the RPE chip look but hold words, not single digits. */
+.rpe-chip.wide {
+  width: auto;
+  min-width: 0;
+  padding: 0 14px;
+  flex: 1 1 auto;
+}
+
 /* Exercise notes */
 .ex-notes { margin: 6px 0 10px; }
 .note-text {

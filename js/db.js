@@ -3,14 +3,20 @@
 //
 // Stores:
 //   exercises: { id, name, muscles[], load ('weighted'|'unloaded'|'hold'),
-//                increment, isCustom, createdAt, notes? }
+//                increment, isCustom, createdAt, notes?, perSide? }
 //   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes,
 //                plannedExerciseIds? (from "repeat workout"; logged sets are
 //                the source of truth — planned is just a to-do list) }
 //   sets:      { id, workoutId, exerciseId, reps|null, weight|null, rpe|null,
-//                durationSec|null, loggedAt }
+//                durationSec|null, side|null, loggedAt }
 // weight null = no load / not measured (bands, bodyweight). Not the same as 0.
 // Hold-type sets (stretches, planks) use durationSec with reps/weight null.
+// side: null   = not a one-side-at-a-time exercise (reps are the whole set)
+//       'both' = per-side exercise, both sides trained (the normal case)
+//       'left' | 'right' = only that side was trained
+// Side lives on the SET, not derived from the exercise, so a past set keeps
+// its meaning even if the exercise's perSide flag changes later. Sets logged
+// before this field existed have side undefined and read as null.
 
 import { SEED_EXERCISES } from './exercises.js';
 
@@ -76,9 +82,15 @@ export async function initDb() {
           muscles: e.muscles,
           load: e.load,
           increment: e.increment ?? 2.5,
+          perSide: e.perSide === true,
           isCustom: false,
           createdAt: now,
         });
+      } else if (cur.perSide === undefined) {
+        // One-time backfill for exercises stored before perSide existed.
+        // Deliberately separate from the sync below: it fires only when the
+        // field is absent, so a later edit to perSide is never clobbered.
+        store.put({ ...cur, perSide: e.perSide === true });
       } else if (!cur.isCustom &&
                  (cur.load !== e.load ||
                   cur.muscles.join() !== e.muscles.join() ||
@@ -98,7 +110,7 @@ export function listExercises() {
     list.sort((a, b) => a.name.localeCompare(b.name)));
 }
 
-export async function addExercise({ name, muscles, load, increment }) {
+export async function addExercise({ name, muscles, load, increment, perSide }) {
   const db = await openDb();
   const exercise = {
     id: crypto.randomUUID(),
@@ -106,6 +118,7 @@ export async function addExercise({ name, muscles, load, increment }) {
     muscles,
     load,
     increment: increment ?? 2.5,
+    perSide: perSide === true,
     isCustom: true,
     createdAt: Date.now(),
   };
@@ -165,7 +178,7 @@ export function listWorkouts() {
 
 // --- sets ---
 
-export async function logSet({ workoutId, exerciseId, reps, weight, rpe, durationSec }) {
+export async function logSet({ workoutId, exerciseId, reps, weight, rpe, durationSec, side }) {
   const db = await openDb();
   const set = {
     id: crypto.randomUUID(),
@@ -175,6 +188,7 @@ export async function logSet({ workoutId, exerciseId, reps, weight, rpe, duratio
     weight: weight ?? null,
     rpe: rpe ?? null,
     durationSec: durationSec ?? null,
+    side: side ?? null,
     loggedAt: Date.now(),
   };
   await tx(db, 'sets', 'readwrite', (s) => s.put(set));

@@ -24,10 +24,12 @@ const state = {
   weight: null,
   rpe: null,
   durationSec: 30,
+  side: null,              // null | 'both' | 'left' | 'right' (see db.js)
   search: '',
   createName: '',          // prefill for the new-exercise form
   createLoad: 'weighted',
   createMuscles: new Set(),
+  createPerSide: false,
   editSet: null,           // set being edited
   editReturn: 'today',     // screen to go back to after editing
 };
@@ -38,13 +40,26 @@ function fmtDate(key) {
     { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+// What a set's `side` value adds to its description. null/undefined means the
+// exercise isn't done one side at a time, so nothing is added.
+const SIDE_NOTE = {
+  both: ' per side',
+  left: ' (left only)',
+  right: ' (right only)',
+};
+
+function sideNote(side) {
+  return SIDE_NOTE[side] ?? '';
+}
+
 function setDesc(s) {
   const rpe = s.rpe === null || s.rpe === undefined ? '' : ` @ RPE ${s.rpe}`;
+  const side = sideNote(s.side);
   if (s.durationSec !== null && s.durationSec !== undefined) {
-    return `${s.durationSec}s hold${rpe}`;
+    return `${s.durationSec}s hold${side}${rpe}`;
   }
   const w = s.weight === null ? '—' : `${s.weight} lb`;
-  return `${s.reps} reps × ${w}${rpe}`;
+  return `${s.reps} reps × ${w}${side}${rpe}`;
 }
 
 // One past session's sets, condensed for the "Last time" line. Same-weight
@@ -68,6 +83,15 @@ function sessionDesc(sets) {
   } else {
     body = sets.map(setDesc).join('; ');
   }
+  // Side, when the whole session agrees. Mixed sides are called out rather
+  // than silently dropped, since that changes what the reps mean.
+  const sides = new Set(sets.map((s) => s.side ?? null));
+  if (sides.size === 1) {
+    body += sideNote([...sides][0]);
+  } else {
+    body += ' (sides vary)';
+  }
+
   // RPE only when every set has one — a partial range would overstate it.
   const rpes = sets.map((s) => s.rpe).filter((r) => r !== null && r !== undefined);
   if (rpes.length > 0 && rpes.length === sets.length) {
@@ -284,6 +308,17 @@ function renderCreate() {
   }
   card.append(muscleRow);
 
+  card.append(el(`<div class="section-label">Trained one side at a time?</div>`));
+  const perSideRow = el(`<div class="chip-grid"></div>`);
+  const perSideChip = el(`<button class="pick-chip">Yes — reps are per side</button>`);
+  if (state.createPerSide) perSideChip.classList.add('selected');
+  perSideChip.onclick = () => {
+    state.createPerSide = !state.createPerSide;
+    perSideChip.classList.toggle('selected', state.createPerSide);
+  };
+  perSideRow.append(perSideChip);
+  card.append(perSideRow);
+
   const saveBtn = el(`<button class="btn" style="margin-top:14px">Create exercise</button>`);
   saveBtn.onclick = async () => {
     const trimmed = state.createName.trim();
@@ -292,6 +327,7 @@ function renderCreate() {
       name: trimmed,
       muscles: [...state.createMuscles],
       load: state.createLoad,
+      perSide: state.createPerSide,
     });
     openLog(ex);
   };
@@ -310,6 +346,8 @@ async function openLog(exercise) {
   state.weight = last ? last.weight : (exercise.load === 'weighted' ? 0 : null);
   state.durationSec = last?.durationSec ?? 30;
   state.rpe = null;
+  // Both sides is the assumed default; only a deliberate tap says otherwise.
+  state.side = exercise.perSide ? 'both' : null;
   state.screen = 'log';
   render();
 }
@@ -348,15 +386,19 @@ async function renderLog() {
 
   const card = el(`<div class="card"></div>`);
   const isHold = ex.load === 'hold';
+  // Spell out what the number counts, so "10" is never ambiguous.
+  const per = ex.perSide ? ' (per side)' : '';
+
+  if (ex.perSide) card.append(sideChipRow());
 
   if (isHold) {
     // Stretches / planks: duration instead of reps × weight
-    card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
+    card.append(stepperRow(`Hold${per}`, () => `${state.durationSec}<small> sec</small>`, (dir) => {
       state.durationSec = Math.max(5, state.durationSec + dir * 15);
     }, durationDirect()));
   } else {
     // Reps stepper
-    card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
+    card.append(stepperRow(`Reps${per}`, () => String(state.reps), (dir) => {
       state.reps = Math.max(1, state.reps + dir);
     }, repsDirect()));
 
@@ -385,6 +427,7 @@ async function renderLog() {
       weight: isHold ? null : state.weight,
       rpe: state.rpe,
       durationSec: isHold ? state.durationSec : null,
+      side: state.side,
     });
     await renderLoggedSets(setList);
     await updateRestTimer(restEl);
@@ -481,6 +524,36 @@ function durationDirect() {
       if (v !== null && Number.isFinite(v) && v >= 5) state.durationSec = Math.round(v);
     },
   };
+}
+
+// Side chips, shown only for one-side-at-a-time exercises. Defaults to Both,
+// so the normal case costs no extra taps; picking Left/Right records that
+// only that side was trained.
+const SIDES = [
+  { key: 'both', label: 'Both' },
+  { key: 'left', label: 'Left only' },
+  { key: 'right', label: 'Right only' },
+];
+
+function sideChipRow() {
+  const row = el(`
+    <div class="rpe-row">
+      <span class="label" style="color:var(--text-dim)">Sides trained</span>
+      <div class="rpe-chips"></div>
+    </div>`);
+  const chips = row.querySelector('.rpe-chips');
+  for (const s of SIDES) {
+    const chip = el(`<button class="rpe-chip wide"></button>`);
+    chip.textContent = s.label;
+    if (state.side === s.key) chip.classList.add('selected');
+    chip.onclick = () => {
+      state.side = s.key;
+      for (const c of chips.children) c.classList.remove('selected');
+      chip.classList.add('selected');
+    };
+    chips.append(chip);
+  }
+  return row;
 }
 
 // RPE chips (optional) — full 1–10 scale, toggling state.rpe
@@ -586,6 +659,7 @@ function openEditSet(set, returnTo) {
   state.weight = set.weight;
   state.durationSec = set.durationSec ?? 30;
   state.rpe = set.rpe;
+  state.side = set.side ?? null;
   state.screen = 'edit-set';
   render();
 }
@@ -606,13 +680,21 @@ async function renderEditSet() {
 
   const card = el(`<div class="card"></div>`);
   const isHold = s.durationSec !== null && s.durationSec !== undefined;
+  // Editable when the set already records a side, or the exercise is per-side
+  // (so a set logged before the flag existed can be corrected).
+  const showSides = state.side !== null || ex?.perSide === true;
+  const per = showSides ? ' (per side)' : '';
+  if (showSides) {
+    if (state.side === null) state.side = 'both';
+    card.append(sideChipRow());
+  }
 
   if (isHold) {
-    card.append(stepperRow('Hold', () => `${state.durationSec}<small> sec</small>`, (dir) => {
+    card.append(stepperRow(`Hold${per}`, () => `${state.durationSec}<small> sec</small>`, (dir) => {
       state.durationSec = Math.max(5, state.durationSec + dir * 15);
     }, durationDirect()));
   } else {
-    card.append(stepperRow('Reps', () => String(state.reps), (dir) => {
+    card.append(stepperRow(`Reps${per}`, () => String(state.reps), (dir) => {
       state.reps = Math.max(1, state.reps + dir);
     }, repsDirect()));
     const inc = ex?.increment ?? 2.5;
@@ -638,6 +720,7 @@ async function renderEditSet() {
       weight: isHold ? null : state.weight,
       rpe: state.rpe,
       durationSec: isHold ? state.durationSec : null,
+      side: state.side,
     });
     goBack();
   };
