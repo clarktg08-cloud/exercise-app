@@ -293,8 +293,17 @@ button { font-family: inherit; }
   gap: 12px;
   line-height: 1;
 }
-.rest-timer[hidden] { display: none; }
 .rest-main { display: flex; align-items: baseline; gap: 12px; }
+
+/* After a long gap the giant clock is meaningless — it collapses to a plain
+   note instead of implying you have been resting for two hours. */
+.rest-stale { display: none; color: var(--text-dim); font-size: 0.92rem; }
+.rest-timer.stale { display: block; margin: 4px 0 12px; }
+.rest-timer.stale .rest-main,
+.rest-timer.stale .rest-target-ctl { display: none; }
+.rest-timer.stale .rest-stale { display: inline; }
+
+.rest-timer[hidden] { display: none; }
 /* At the target the clock keeps counting up and simply lights up: a state
    change you can catch at a glance, not an interruption. */
 .rest-timer.ready { color: var(--accent); }

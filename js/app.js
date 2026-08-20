@@ -515,6 +515,22 @@ function mmss(total) {
   return `${m}:${s}`;
 }
 
+function agoLabel(secs) {
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `Last set ${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return `Last set ${h}h${rem ? ` ${rem}m` : ''} ago`;
+}
+
+// Past this gap you are not resting, you have just come back — so the clock
+// stops being a rest clock and becomes a plain "when did I last lift" note.
+// A presentation rule only; nothing about the logged data changes. Scales
+// with the target so a long deliberate rest is never cut off early.
+function restIsStale(secs, target) {
+  return secs > Math.max(600, target * 3);
+}
+
 // Counts UP, the way a rest clock normally reads, with the suggested target
 // shown beside it. Reaching the target changes how it looks rather than
 // interrupting anything; the optional alert is a vibration, never a sound,
@@ -540,8 +556,9 @@ async function updateRestTimer(restEl) {
   const down = el(`<button class="rest-adj" aria-label="shorter rest">−</button>`);
   const targetLabel = el(`<button class="rest-target" aria-label="reset rest target to suggested"></button>`);
   const up = el(`<button class="rest-adj" aria-label="longer rest">+</button>`);
+  const stale = el(`<span class="rest-stale"></span>`);
   ctl.append(alarm, down, targetLabel, up);
-  restEl.append(main, ctl);
+  restEl.append(main, ctl, stale);
 
   const paintAlarm = () => {
     alarm.textContent = alarmOn() ? '🔔' : '🔕';
@@ -574,6 +591,15 @@ async function updateRestTimer(restEl) {
   const tick = () => {
     const target = restTargetSec(state.exercise, last);
     const secs = Math.max(0, Math.floor((Date.now() - last.loggedAt) / 1000));
+
+    if (restIsStale(secs, target)) {
+      restEl.classList.add('stale');
+      restEl.classList.remove('ready');
+      stale.textContent = agoLabel(secs);
+      return;
+    }
+    restEl.classList.remove('stale');
+
     time.textContent = mmss(secs);
     const ready = secs >= target;
     restEl.classList.toggle('ready', ready);
