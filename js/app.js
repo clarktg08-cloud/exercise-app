@@ -237,7 +237,12 @@ async function appendEarlierSessions(earlier) {
     card.querySelector('.sets').textContent = names.length
       ? `${sets.length} set${sets.length === 1 ? '' : 's'} — ${names.join(', ')}`
       : 'No sets logged';
-    card.onclick = () => { state.detailWorkout = w; state.screen = 'workout-detail'; render(); };
+    card.onclick = () => {
+      state.detailWorkout = w;
+      state.detailReturn = 'today';
+      state.screen = 'workout-detail';
+      render();
+    };
     view.append(card);
   }
 }
@@ -1331,10 +1336,12 @@ async function renderWorkoutDetail() {
   view.innerHTML = '';
 
   // Back goes where you came from: the day screen when the day held more than
-  // one session, otherwise straight to History.
-  const fromDay = state.detailReturn === 'day-detail';
-  const back = el(`<button class="back-link">‹ ${fromDay ? fmtDate(w.date) : 'History'}</button>`);
-  back.onclick = () => { state.screen = fromDay ? 'day-detail' : 'history'; render(); };
+  // one session, the Today screen when opened from Earlier today, else History.
+  const to = ['day-detail', 'today', 'history'].includes(state.detailReturn)
+    ? state.detailReturn : 'history';
+  const label = { 'day-detail': fmtDate(w.date), today: 'Today', history: 'History' }[to];
+  const back = el(`<button class="back-link">‹ ${label}</button>`);
+  back.onclick = () => { state.screen = to; render(); };
   view.append(back);
 
   const sets = await setsForWorkout(w.id);
@@ -1401,6 +1408,9 @@ function render() {
     if (state.screen === 'picker') return renderPicker();
     if (state.screen === 'log') return renderLog();
     if (state.screen === 'create') return renderCreate();
+    // An earlier session opened from Today stays in the Today tab; without
+    // this the screen was reset below and the card did nothing at all.
+    if (state.screen === 'workout-detail') return renderWorkoutDetail();
     state.screen = 'today';
     return renderToday();
   }
