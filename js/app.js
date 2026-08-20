@@ -405,11 +405,14 @@ async function updateRestTimer(restEl) {
   const sets = await setsForWorkout(state.workout.id);
   if (sets.length === 0) { restEl.hidden = true; return; }
   const lastAt = Math.max(...sets.map((s) => s.loggedAt));
+  restEl.innerHTML = '';
+  const time = el(`<span class="rest-time"></span>`);
+  restEl.append(el(`<span class="rest-label">Rest</span>`), time);
   const tick = () => {
     const secs = Math.max(0, Math.floor((Date.now() - lastAt) / 1000));
     const m = Math.floor(secs / 60);
     const s = String(secs % 60).padStart(2, '0');
-    restEl.textContent = `Rest: ${m}:${s}`;
+    time.textContent = `${m}:${s}`;
   };
   tick();
   restEl.hidden = false;

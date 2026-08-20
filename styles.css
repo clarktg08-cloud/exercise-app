@@ -277,11 +277,29 @@ button { font-family: inherit; }
 .history-item .summary { color: var(--text-dim); font-size: 0.92rem; margin-top: 2px; }
 
 /* Rest timer */
+/* Rest timer: sized to be readable at arm's length mid-set, not squinted at.
+   The [hidden] guard is required — display:flex would otherwise override the
+   hidden attribute and show an empty timer before the first set is logged. */
 .rest-timer {
   color: var(--accent);
-  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  margin: 6px 0;
+  margin: 10px 0 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  line-height: 1;
+}
+.rest-timer[hidden] { display: none; }
+.rest-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.rest-time {
+  font-size: 3rem;
+  font-weight: 700;
 }
 
 /* Exercise notes */
