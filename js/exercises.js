@@ -16,9 +16,19 @@
 // antagonists on opposite sides of the lower leg. Tagging both as "calves"
 // would credit the calves for shin work and make the weekly set count
 // meaningless for either.
+// There is deliberately no 'hips' group: the hip is a joint, not a muscle
+// group, and it overlapped 'glutes' (gluteus medius/minimus ARE the main hip
+// abductors), so one band drill was counted twice under two names. The hip is
+// split by the movement its muscles produce instead.
+//
+// Known, accepted overlap: gluteus medius is both a glute and an abductor.
+// Convention here follows normal practice — 'glutes' means hip extension work
+// (glute max dominant), 'abductors' means lateral hip work. The boundary is
+// genuinely fuzzy in anatomy; naming it here beats pretending it is crisp.
 export const MUSCLE_GROUPS = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps',
-  'quads', 'hamstrings', 'glutes', 'calves', 'shins', 'hips', 'core',
+  'quads', 'hamstrings', 'glutes', 'abductors', 'adductors', 'hip flexors',
+  'calves', 'shins', 'core',
 ];
 
 export const SEED_EXERCISES = [
@@ -38,8 +48,12 @@ export const SEED_EXERCISES = [
   { name: 'Tibialis Raise',       muscles: ['shins'],                  load: 'unloaded' },
   { name: 'Hip Thrust',           muscles: ['glutes', 'hamstrings'],   load: 'weighted' },
   { name: 'Glute Bridge',         muscles: ['glutes'],                 load: 'unloaded' },
-  { name: '4-Way Hip (band)',     muscles: ['hips', 'glutes'],         load: 'unloaded', perSide: true },
-  { name: 'Band Lateral Walk',    muscles: ['hips', 'glutes'],         load: 'unloaded' },
+  // One set of 4-way hip is a set in each direction, so it credits one set to
+  // each of the four muscle groups those directions train. Accurate volume
+  // without splitting it into four exercises or costing extra taps.
+  { name: '4-Way Hip (band)',     muscles: ['hip flexors', 'glutes', 'abductors', 'adductors'],
+                                                                       load: 'unloaded', perSide: true },
+  { name: 'Band Lateral Walk',    muscles: ['abductors', 'glutes'],    load: 'unloaded' },
 
   // Push
   { name: 'Bench Press',          muscles: ['chest', 'triceps', 'shoulders'], load: 'weighted' },
@@ -70,7 +84,7 @@ export const SEED_EXERCISES = [
   { name: 'Hamstring Stretch',        muscles: ['hamstrings'],      load: 'hold', perSide: true },
   { name: 'Quad Stretch',             muscles: ['quads'],           load: 'hold', perSide: true },
   { name: 'Calf Stretch (wall)',      muscles: ['calves'],          load: 'hold', perSide: true },
-  { name: 'Hip Flexor Stretch',       muscles: ['hips'],            load: 'hold', perSide: true },
-  { name: 'Figure-4 Glute Stretch',   muscles: ['glutes', 'hips'],  load: 'hold', perSide: true },
+  { name: 'Hip Flexor Stretch',       muscles: ['hip flexors'],     load: 'hold', perSide: true },
+  { name: 'Figure-4 Glute Stretch',   muscles: ['glutes'],          load: 'hold', perSide: true },
   { name: 'Chest Stretch (doorway)',  muscles: ['chest'],           load: 'hold' },
 ];
