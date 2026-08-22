@@ -5,6 +5,7 @@ import {
   logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
   lastSessionForExercise,
   recentExerciseIds, listSets, exportAll, importAll,
+  listBackups, restoreBackup,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
 import { APP_VERSION } from './version.js';
@@ -1081,6 +1082,36 @@ function plural(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
+// Safety snapshots taken before a migration rewrote anything. Only rendered
+// when one exists - most of the time there is nothing to offer and nothing to say.
+async function appendBackupRow() {
+  const backups = await listBackups();
+  if (backups.length === 0) return;
+  const b = backups[0];
+
+  const row = el('<div class="backup-row"></div>');
+  const label = el('<span class="backup-note"></span>');
+  label.textContent =
+    'Safety backup from ' + fmtDate(trainingDayKey(b.createdAt)) + ' ' + fmtTime(b.createdAt) +
+    ' — ' + plural(b.workouts, 'session') + ', ' + plural(b.sets, 'set');
+  const btn = el('<button class="btn small secondary">Restore</button>');
+  btn.onclick = async () => {
+    const ok = confirm(
+      'Restore the saved snapshot? It puts back ' +
+      plural(b.workouts, 'session') + ' and ' + plural(b.sets, 'set') +
+      ' as they were before the last data migration. Nothing is deleted: ' +
+      'matching records are overwritten, and anything logged since is kept.');
+    if (!ok) return;
+    const res = await restoreBackup(b.id);
+    alert(res
+      ? 'Restored ' + plural(res.workouts, 'session') + ' and ' + plural(res.sets, 'set') + '.'
+      : 'That snapshot is no longer available.');
+    render();
+  };
+  row.append(label, btn);
+  view.append(row);
+}
+
 async function renderHistory() {
   headerTitle.textContent = 'History';
   headerDate.textContent = `v${APP_VERSION}`;
@@ -1127,6 +1158,8 @@ async function renderHistory() {
   };
   dataRow.append(importBtn, fileInput);
   view.append(dataRow);
+
+  await appendBackupRow();
 
   const workouts = await listWorkouts();
   if (workouts.length === 0) {

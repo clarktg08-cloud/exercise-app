@@ -6,7 +6,7 @@ first; this file is just the current state between them.
 
 ## Where things stand
 
-- **App version v0.6.1**, on `master`, pushed and live.
+- **App version v0.7.0**, on `master`.
 - **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
   https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
   Verified live: service worker registers and activates, all 9 assets cached
@@ -50,6 +50,22 @@ first; this file is just the current state between them.
   against a map ('today' | 'day-detail' | 'history'). Lesson for next time: a
   click handler that only sets `state.screen` is dead unless `render()`'s branch
   for the current TAB handles that screen.
+
+- **Safety snapshots (v0.7.0)** — `DB_VERSION` is now **2** and a `backups`
+  store holds a pre-migration snapshot of workouts + sets. `migrateSessions()`
+  calls `saveBackup()` BEFORE its first write, and only when that run would
+  actually change something. Bounded to the newest 3. History shows a Restore
+  control when a snapshot exists.
+  - Restore uses **merge semantics** like import: matching ids overwritten,
+    nothing deleted. An undone split therefore leaves an empty session behind.
+  - Restore is **not permanent on its own** — the migration re-runs on the next
+    load. The guarantee is that pre-migration data survives while a fix ships.
+- **Fixed a landmine in the same change:** `onupgradeneeded` called
+  `createObjectStore` unguarded, so the FIRST ever `DB_VERSION` bump would have
+  thrown ConstraintError on every existing install, failing `openDb()` and
+  locking users out of their own data. All creations are now guarded with
+  `objectStoreNames.contains()`. Verified by building a real v1 database with
+  data and upgrading it.
 
 ## Running / testing
 

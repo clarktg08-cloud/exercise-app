@@ -510,3 +510,15 @@ button { font-family: inherit; }
   text-align: center;
   margin-top: 12px;
 }
+
+/* Safety-backup row in History. Quiet by design — it only appears when a
+   migration actually rewrote something, and it should not look like an alarm. */
+.backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+}
+.backup-note { color: var(--text-dim); font-size: 0.85rem; flex: 1 1 60%; }

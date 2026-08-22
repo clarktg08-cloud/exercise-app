@@ -23,7 +23,7 @@
 import { SEED_EXERCISES } from './exercises.js';
 
 const DB_NAME = 'exercise-app';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -33,13 +33,24 @@ function openDb() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      const ex = db.createObjectStore('exercises', { keyPath: 'id' });
-      ex.createIndex('name', 'name', { unique: false });
-      const wo = db.createObjectStore('workouts', { keyPath: 'id' });
-      wo.createIndex('date', 'date', { unique: false });
-      const sets = db.createObjectStore('sets', { keyPath: 'id' });
-      sets.createIndex('workoutId', 'workoutId', { unique: false });
-      sets.createIndex('exerciseId', 'exerciseId', { unique: false });
+      // Every creation is guarded. Unguarded createObjectStore throws
+      // ConstraintError on an existing database, which makes openDb() reject
+      // and locks the user out of their own training history. That would have
+      // fired on the FIRST version bump anyone ever shipped.
+      const store = (name, opts) =>
+        db.objectStoreNames.contains(name) ? null : db.createObjectStore(name, opts);
+
+      const ex = store('exercises', { keyPath: 'id' });
+      if (ex) ex.createIndex('name', 'name', { unique: false });
+      const wo = store('workouts', { keyPath: 'id' });
+      if (wo) wo.createIndex('date', 'date', { unique: false });
+      const sets = store('sets', { keyPath: 'id' });
+      if (sets) {
+        sets.createIndex('workoutId', 'workoutId', { unique: false });
+        sets.createIndex('exerciseId', 'exerciseId', { unique: false });
+      }
+      // v2: safety snapshots, written before a migration rewrites anything.
+      store('backups', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -106,6 +117,62 @@ export async function initDb() {
   await migrateSessions();
 }
 
+// --- safety snapshots ---
+//
+// Deploying code cannot touch stored data, but a MIGRATION can: it rewrites
+// records on startup, on every device, with no server copy to fall back on.
+// So before a migration changes anything, the previous state is snapshotted
+// here. A bad migration becomes recoverable instead of fatal.
+const MAX_BACKUPS = 3;
+
+async function saveBackup(reason, workouts, sets) {
+  const db = await openDb();
+  const entry = { id: crypto.randomUUID(), createdAt: Date.now(), reason, workouts, sets };
+  await tx(db, 'backups', 'readwrite', (s) => s.put(entry));
+  // Bounded: keep the newest few, drop the rest, so this cannot grow forever.
+  const all = await getAll('backups');
+  const stale = all.sort((a, b) => b.createdAt - a.createdAt).slice(MAX_BACKUPS);
+  if (stale.length) {
+    await tx(db, 'backups', 'readwrite', (s) => {
+      for (const b of stale) s.delete(b.id);
+      return s.count();
+    });
+  }
+  return entry.id;
+}
+
+// Newest first, without dragging the full payload around.
+export async function listBackups() {
+  const all = await getAll('backups');
+  return all
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((b) => ({ id: b.id, createdAt: b.createdAt, reason: b.reason,
+                   workouts: b.workouts.length, sets: b.sets.length }));
+}
+
+// Merge semantics, deliberately the same as importAll: snapshot records are
+// written back over matching ids and NOTHING is deleted. A restore can never
+// itself destroy data — worst case it leaves an empty session behind from a
+// split that got undone.
+export async function restoreBackup(id) {
+  const db = await openDb();
+  const entry = await new Promise((resolve, reject) => {
+    const r = db.transaction('backups').objectStore('backups').get(id);
+    r.onsuccess = () => resolve(r.result ?? null);
+    r.onerror = () => reject(r.error);
+  });
+  if (!entry) return null;
+  await tx(db, 'workouts', 'readwrite', (s) => {
+    for (const w of entry.workouts) s.put(w);
+    return s.count();
+  });
+  await tx(db, 'sets', 'readwrite', (s) => {
+    for (const x of entry.sets) s.put(x);
+    return s.count();
+  });
+  return { workouts: entry.workouts.length, sets: entry.sets.length };
+}
+
 // Bring stored workouts in line with the session model:
 //   1. re-date each workout from its real start time using the 4am boundary
 //   2. split any workout whose sets contain a gap longer than SESSION_GAP_MS
@@ -157,6 +224,12 @@ async function migrateSessions() {
       created.push(session);
       for (const s of run) moved.push({ ...s, workoutId: session.id });
     }
+  }
+
+  // Snapshot BEFORE the first write, and only when this run would change
+  // something — otherwise every startup would write a pointless backup.
+  if (changed.length || created.length || moved.length) {
+    await saveBackup('migrateSessions', workouts, sets);
   }
 
   if (changed.length || created.length) {
