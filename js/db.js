@@ -13,6 +13,10 @@
 //                durationSec|null, side|null, loggedAt }
 // weight null = no load / not measured (bands, bodyweight). Not the same as 0.
 // Hold-type sets (stretches, planks) use durationSec with reps/weight null.
+//   exerciseImages: { id, exerciseId, blob, width, height, addedAt }
+//     Form photos for an exercise. Kept in their own store because
+//     listExercises() runs on every picker render and must not drag image
+//     blobs through memory to show a list of names.
 // side: null   = not a one-side-at-a-time exercise (reps are the whole set)
 //       'both' = per-side exercise, both sides trained (the normal case)
 //       'left' | 'right' = only that side was trained
@@ -23,7 +27,7 @@
 import { SEED_EXERCISES } from './exercises.js';
 
 const DB_NAME = 'exercise-app';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise = null;
 
@@ -51,6 +55,10 @@ function openDb() {
       }
       // v2: safety snapshots, written before a migration rewrites anything.
       store('backups', { keyPath: 'id' });
+      // v3: form photos, indexed by exercise so one lookup gets an
+      // exercise's whole set without scanning every image in the database.
+      const imgs = store('exerciseImages', { keyPath: 'id' });
+      if (imgs) imgs.createIndex('exerciseId', 'exerciseId', { unique: false });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -274,6 +282,53 @@ export async function updateExercise(exercise) {
   const db = await openDb();
   await tx(db, 'exercises', 'readwrite', (s) => s.put(exercise));
   return exercise;
+}
+
+// --- exercise photos ---
+//
+// Blobs are stored as-is: IndexedDB keeps binary as binary, so nothing is
+// base64-inflated on disk. Callers are responsible for downscaling before
+// they get here (see downscaleImage in app.js) — a raw phone photo is
+// 3-12MB and a few dozen of those would dwarf the training history sharing
+// this database.
+//
+// Deliberately NOT part of exportAll(). That backup exists to protect
+// training history, which is irreplaceable; a photo can be re-taken in ten
+// seconds. Packing images into it would multiply the file size and force the
+// phone to hold the whole thing in memory as one string. importAll() never
+// deletes, so restoring a backup leaves existing photos alone.
+
+export async function addExerciseImage(exerciseId, blob, width, height) {
+  const db = await openDb();
+  const image = {
+    id: crypto.randomUUID(),
+    exerciseId, blob, width, height,
+    addedAt: Date.now(),
+  };
+  await tx(db, 'exerciseImages', 'readwrite', (s) => s.put(image));
+  return image;
+}
+
+// Oldest first, so the order stays stable as photos are added.
+export async function imagesForExercise(exerciseId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('exerciseImages').objectStore('exerciseImages')
+      .index('exerciseId').getAll(exerciseId);
+    req.onsuccess = () => resolve(req.result.sort((a, b) => a.addedAt - b.addedAt));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function deleteExerciseImage(id) {
+  const db = await openDb();
+  await tx(db, 'exerciseImages', 'readwrite', (s) => s.delete(id));
+}
+
+// Rough on-disk size of all stored photos, for the storage line in History.
+export async function imageStorageBytes() {
+  const all = await getAll('exerciseImages');
+  return all.reduce((n, i) => n + (i.blob?.size ?? 0), 0);
 }
 
 // --- workouts ---

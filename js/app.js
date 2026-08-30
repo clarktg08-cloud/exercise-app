@@ -6,6 +6,7 @@ import {
   lastSessionForExercise,
   recentExerciseIds, listSets, exportAll, importAll,
   listBackups, restoreBackup,
+  addExerciseImage, imagesForExercise, deleteExerciseImage, imageStorageBytes,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
 import { APP_VERSION } from './version.js';
@@ -488,6 +489,12 @@ async function renderLog() {
   view.append(notesWrap);
   renderExerciseNotes(notesWrap, ex);
 
+  // Form photos: same job as the note, in the medium that reads faster
+  // mid-set. Not awaited — reading blobs must never hold up the log screen.
+  const photosWrap = el(`<div class="ex-photos"></div>`);
+  view.append(photosWrap);
+  renderExercisePhotos(photosWrap, ex);
+
   // Rest timer: time since the last set logged anywhere in today's workout
   const restEl = el(`<div class="rest-timer" hidden></div>`);
   view.append(restEl);
@@ -708,6 +715,151 @@ function renderExerciseNotes(wrap, ex) {
     addBtn.onclick = startEditing;
     wrap.append(addBtn);
   }
+}
+
+// ---------- Exercise photos ----------
+
+// A phone photo is 3-12MB. Stored raw, a few dozen would dwarf the training
+// history sharing this database and put it at real risk of eviction. Bounded
+// to PHOTO_MAX_PX on the long edge and re-encoded as JPEG, each one lands
+// around 100-200KB — still sharp enough to check a setup on a phone.
+const PHOTO_MAX_PX = 1000;
+const PHOTO_QUALITY = 0.8;
+
+async function downscaleImage(file) {
+  // imageOrientation is explicit: phone cameras record rotation in EXIF
+  // rather than rotating the pixels, and the default would store a sideways
+  // photo of a stretch that was shot upright.
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, PHOTO_MAX_PX / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', PHOTO_QUALITY));
+  if (!blob) throw new Error('could not encode image');
+  return { blob, width: w, height: h };
+}
+
+// Every object URL pins its blob in memory until revoked, so they are tracked
+// and released on each re-render. The viewer reuses the strip's URLs rather
+// than minting its own, which is why the viewer is always closed before the
+// strip re-renders.
+let photoUrls = [];
+function releasePhotoUrls() {
+  for (const u of photoUrls) URL.revokeObjectURL(u);
+  photoUrls = [];
+}
+function photoUrl(blob) {
+  const u = URL.createObjectURL(blob);
+  photoUrls.push(u);
+  return u;
+}
+
+async function renderExercisePhotos(wrap, ex) {
+  releasePhotoUrls();
+  wrap.innerHTML = '';
+  const images = await imagesForExercise(ex.id);
+  const urls = images.map((img) => photoUrl(img.blob));
+
+  const strip = el(`<div class="photo-strip"></div>`);
+  images.forEach((img, i) => {
+    const btn = el(`<button class="photo-thumb"></button>`);
+    const im = el(`<img>`);
+    im.src = urls[i];
+    // Set as a property, never interpolated into HTML: exercise names can
+    // contain apostrophes and quotes.
+    im.alt = `${ex.name} photo ${i + 1} of ${images.length}`;
+    im.loading = 'lazy';
+    btn.append(im);
+    btn.onclick = () => openPhotoViewer(images, urls, i, ex, wrap);
+    strip.append(btn);
+  });
+
+  const label = images.length ? '+ Photo' : '+ Add form photo';
+  const add = el(`<label class="photo-add">${label}<input type="file" accept="image/*" multiple hidden></label>`);
+  const input = add.querySelector('input');
+  input.onchange = async () => {
+    const files = [...input.files];
+    if (!files.length) return;
+    add.textContent = files.length > 1 ? `Saving ${files.length} photos…` : 'Saving photo…';
+    add.classList.add('busy');
+    let failed = 0;
+    for (const f of files) {
+      try {
+        const { blob, width, height } = await downscaleImage(f);
+        await addExerciseImage(ex.id, blob, width, height);
+      } catch (err) {
+        // One unreadable file must not discard the rest of the batch.
+        console.error('photo failed', f.name, err);
+        failed++;
+      }
+    }
+    await renderExercisePhotos(wrap, ex);
+    if (failed) {
+      const warn = el(`<div class="photo-error"></div>`);
+      warn.textContent = `${failed} photo${failed > 1 ? 's' : ''} could not be read.`;
+      wrap.append(warn);
+    }
+  };
+  strip.append(add);
+  wrap.append(strip);
+}
+
+// Full-screen viewer. Horizontal scroll-snap gives native swiping on the
+// phone and drag/scroll on desktop without a gesture library.
+function openPhotoViewer(images, urls, startIndex, ex, wrap) {
+  const overlay = el(`<div class="photo-viewer"></div>`);
+  const track = el(`<div class="photo-track"></div>`);
+  images.forEach((img, i) => {
+    const slide = el(`<div class="photo-slide"></div>`);
+    const im = el(`<img>`);
+    im.src = urls[i];
+    im.alt = `${ex.name} photo ${i + 1} of ${images.length}`;
+    slide.append(im);
+    track.append(slide);
+  });
+
+  const bar = el(`<div class="photo-bar"></div>`);
+  const count = el(`<span class="photo-count"></span>`);
+  count.textContent = `${startIndex + 1} / ${images.length}`;
+  const del = el(`<button class="btn small danger">Delete</button>`);
+  const close = el(`<button class="btn small secondary">Close</button>`);
+  bar.append(count, del, close);
+
+  let current = startIndex;
+  track.onscroll = () => {
+    const i = Math.round(track.scrollLeft / track.clientWidth);
+    if (i !== current && images[i]) {
+      current = i;
+      count.textContent = `${current + 1} / ${images.length}`;
+    }
+  };
+
+  const dismiss = () => {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+  };
+  const onKey = (e) => { if (e.key === 'Escape') dismiss(); };
+  document.addEventListener('keydown', onKey);
+
+  close.onclick = dismiss;
+  overlay.onclick = (e) => { if (e.target === overlay) dismiss(); };
+  del.onclick = async () => {
+    if (!confirm('Delete this photo? This cannot be undone.')) return;
+    await deleteExerciseImage(images[current].id);
+    // Closed before the re-render, which revokes the URLs these slides use.
+    dismiss();
+    await renderExercisePhotos(wrap, ex);
+  };
+
+  overlay.append(track, bar);
+  document.body.append(overlay);
+  // Jump to the tapped photo without animating past the others.
+  track.scrollLeft = startIndex * track.clientWidth;
 }
 
 // Tap-to-type handlers for the three stepper kinds. Invalid input keeps the
@@ -1158,6 +1310,19 @@ async function renderHistory() {
   };
   dataRow.append(importBtn, fileInput);
   view.append(dataRow);
+
+  // Photos are the one thing the export above does NOT contain, so say so
+  // where the export button is rather than leaving it to be discovered after
+  // a restore. Also surfaces how much space they occupy: photos share this
+  // database with the training history.
+  const photoBytes = await imageStorageBytes();
+  if (photoBytes > 0) {
+    const note = el(`<div class="storage-note"></div>`);
+    note.textContent =
+      `Form photos: ${(photoBytes / 1048576).toFixed(1)} MB. ` +
+      `Not included in the export — re-take them if you ever restore.`;
+    view.append(note);
+  }
 
   await appendBackupRow();
 

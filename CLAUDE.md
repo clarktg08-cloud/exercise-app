@@ -38,6 +38,14 @@ muscle group, progressive-overload checks) from clean set-level data.
   name `exercise-app`). Until cloud sync exists, clearing site data = deleting
   Taylor's training history. Never advise clearing storage as a fix; use the
   JSON export (History tab) first.
+- **Form photos are NOT in the JSON export.** They live as blobs in the
+  `exerciseImages` store; the export is JSON and stays that way on purpose, so
+  the backup protecting irreplaceable training history doesn't balloon to tens
+  of MB for pictures that can be re-taken in ten seconds. A restore brings back
+  every set and no photos. The History tab says so next to the export button.
+- Photos are downscaled to 1000px on the long edge and re-encoded as JPEG
+  before storage (~100-200KB each). Never store a raw camera file: they run
+  3-12MB and would put the training history at real risk of eviction.
 - Planned future: local-first with sync to Cloudflare D1. Google Drive is
   backup/export only, never the live store.
 - Schema changes must migrate existing data (bump `DB_VERSION`, write an
