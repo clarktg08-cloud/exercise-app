@@ -86,14 +86,14 @@ export const SEED_EXERCISES = [
   { name: 'Calf Stretch (wall)',      muscles: ['calves'],          load: 'hold', perSide: true },
   { name: 'Hip Flexor Stretch',       muscles: ['hip flexors'],     load: 'hold', perSide: true },
   { name: 'Figure-4 Glute Stretch',   muscles: ['glutes'],          load: 'hold', perSide: true },
-  // Leg held straight out to the side: the adductors (gracilis especially,
-  // since the locked knee is what makes it bite) and medial hamstrings
-  // lengthen, and the high hip flexion takes glute max and the deep rotators
-  // along with them. 'abductors' is tagged because that is where Taylor feels
-  // it holding the leg up — contraction, not stretch, but it makes the
-  // exercise findable under that filter. Hold-type, so none of these tags
-  // reach the weekly set math (see insights.js).
-  { name: 'Seated Straight-Leg Adductor Stretch',
-    muscles: ['adductors', 'hamstrings', 'glutes', 'abductors'], load: 'hold', perSide: true },
+  // Leg held straight out with the torso rotated away, so the leg crosses the
+  // midline relative to the pelvis: gluteus medius/minimus, TFL and the
+  // lateral hamstring (biceps femoris) lengthen. Taylor feels it on the
+  // OUTSIDE of the leg, which is what settles it — a photo makes the hip look
+  // abducted, but abduction would shorten these, not stretch them. No
+  // adductor tag for that reason. Hold-type, so the tags stay out of the
+  // weekly set math (see insights.js) and only drive the picker filter.
+  { name: 'Seated Straight-Leg Abductor Stretch',
+    muscles: ['abductors', 'hamstrings', 'glutes'], load: 'hold', perSide: true },
   { name: 'Chest Stretch (doorway)',  muscles: ['chest'],           load: 'hold' },
 ];
