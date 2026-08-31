@@ -1,8 +1,44 @@
-# Session handoff — 2026-09-08
+# Session handoff — 2026-10-13
 
 For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
 first; this file is just the current state between them.
+
+## 2026-10-13 — desk takeover: what was checked, what is still open
+
+Written by the desktop session titled "Exercise App Coding". It is the one
+standing desk for this app; when its thread gets long Taylor opens a fresh
+session under the same name, and that session starts from these three files.
+Unlike the cloud sessions, the desktop can reach the live URL, so the check
+that had been outstanding since 2026-09-06 finally ran.
+
+- **v0.9.1 IS being served.** Sampled twice, minutes apart, from several edge
+  nodes: `js/version.js` reads 0.9.1, `sw.js` reads `CACHE_VERSION = 'v18'`,
+  and all 12 deployed files (index.html, styles.css, sw.js, the manifest, six
+  `js/` modules, both icons) are byte-identical to `origin/master` (a0c4a2e)
+  by SHA-256. `Last-Modified` is 2026-09-08 02:07:58 GMT, the 41bbc6e deploy.
+  The "never confirmed as serving" notes further down are closed by this.
+- **Still open: what Taylor's PHONE shows.** A correct server does not prove
+  a correct phone. His 2026-09-08 screenshots all showed v0.9.0. Ask him to
+  open History and read the version line. v0.9.1 closes it; v0.9.0 after five
+  weeks is a real stale-service-worker bug, and the place to start is `sw.js`.
+- **The Pages run for a0c4a2e (37371826307) never finished.** Build job
+  succeeded 2026-10-05 20:57 UTC; `deploy` and `report-build-status` were
+  cancelled 15 minutes later. A week on, the run still reports `queued`, the
+  Pages API reports the site `building`, and the deployment's last status is
+  `error`. Harmless today because a0c4a2e is docs-only and the live files are
+  already identical. But the next push is the first real deploy since, so
+  check that its Pages run actually completes, then sample the live URL; do
+  not assume. Re-running the stuck run is itself a deploy and needs his go.
+- **This PC's checkout had drifted: 7 commits behind, 1 ahead.** The one
+  local commit was a docs wrap-up from 2026-08-31 that was never pushed. It
+  has been rebased onto master; its still-true content is merged in below and
+  into ROADMAP "Agreed next" #2 (the sync traps, which no other session had
+  seen). The original is kept on the local branch
+  `backup/pre-rebase-2026-10-13`. Local `master` is now `origin/master` plus
+  docs-only commits, unpushed.
+- Three `claude/*` branches on GitHub are leftovers from cloud sessions, each
+  0 commits ahead of `master`. Nothing in them is unmerged.
 
 ## v0.9.1 — DEPLOYED 2026-09-08 (current live version)
 
@@ -160,7 +196,26 @@ timed hold, and a custom name with an apostrophe.
 
 ## Where things stand
 
-- **App version v0.7.0**, on `master`.
+- **For the current version, read the top of this file.** The bullets below
+  are how the app got here; they still hold unless marked otherwise.
+- **Concurrency note, and a real one:** during the 2026-08-21 session another
+  session pushed v0.7.2 and v0.8.0 to `master` while this one was working.
+  That is the collision CLAUDE.md warns about. It resolved cleanly only
+  because the two sessions touched different things. It happened again by
+  2026-10-13: the desktop checkout sat at v0.8.0 while cloud sessions shipped
+  v0.9.0 and v0.9.1. **Run `git fetch` and check `git log origin/master -1`
+  before assuming you know the version.**
+- **`DB_VERSION` is now 3.** v0.7.0 took it 1→2 (backups store); v0.8.0 took
+  it 2→3 (exerciseImages store). Both rely on the guarded `onupgradeneeded`
+  added in v0.7.0 — without that guard the 2→3 bump would have bricked every
+  install.
+- **Form photos (v0.8.0, not written by this session)** — photos live in their
+  own `exerciseImages` store, downscaled to 1000px and re-encoded as JPEG
+  (~100–200KB, not a 3–12MB camera file) because they share a database with
+  training history that has no server copy. They are deliberately NOT in the
+  JSON export: a photo can be re-taken, training history cannot, and packing
+  blobs in would bloat the one backup that matters. Restoring a backup leaves
+  photos alone.
 - **DEPLOYED 2026-08-19 (evening) to GitHub Pages:**
   https://clarktg08-cloud.github.io/exercise-app/ — Taylor gave explicit go.
   Verified live: service worker registers and activates, all 9 assets cached
@@ -205,8 +260,8 @@ timed hold, and a custom name with an apostrophe.
   click handler that only sets `state.screen` is dead unless `render()`'s branch
   for the current TAB handles that screen.
 
-- **Safety snapshots (v0.7.0)** — `DB_VERSION` is now **2** and a `backups`
-  store holds a pre-migration snapshot of workouts + sets. `migrateSessions()`
+- **Safety snapshots (v0.7.0)** — this took `DB_VERSION` to 2 (it is 3 now,
+  see above) and a `backups` store holds a pre-migration snapshot of workouts + sets. `migrateSessions()`
   calls `saveBackup()` BEFORE its first write, and only when that run would
   actually change something. Bounded to the newest 3. History shows a Restore
   control when a snapshot exists.
@@ -220,6 +275,15 @@ timed hold, and a custom name with an apostrophe.
   locking users out of their own data. All creations are now guarded with
   `objectStoreNames.contains()`. Verified by building a real v1 database with
   data and upgrading it.
+
+- **Sharing with a friend (2026-08-21).** No work needed — the URL is public
+  and the app is a PWA, so a friend just opens it, installs it, and gets every
+  future deploy automatically. His data stays in his own browser; the two
+  databases never meet. Taylor had NOT sent the link yet as of that session's
+  end. He decided against a feedback form (texting is better). His "no sync
+  for now" from that day was superseded on 2026-09-08, when Drive backup was
+  agreed (see above). The safety snapshots above were built specifically
+  because a second person's data would be at stake.
 
 ## Running / testing
 
@@ -259,7 +323,7 @@ timed hold, and a custom name with an apostrophe.
 - Keep changes small and self-contained; he's between sets.
 - Bump `APP_VERSION` in js/version.js on every user-visible change.
 - Commit locally anytime; never push/deploy/publish without explicit go.
-- Once a remote exists (not yet): `git fetch` before editing — he runs
-  concurrent sessions from multiple devices.
+- `git fetch` before editing — he runs concurrent sessions from multiple
+  devices, and cloud sessions push to `master` too.
 - Model advice already given: routine iteration on Opus 5 + fast mode,
   medium effort; raise effort for the Drive sync design when it comes.

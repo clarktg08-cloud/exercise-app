@@ -71,6 +71,29 @@ order and scope; this file just keeps sessions on the same page.
    the consent screen is unpublished only listed test users can sign in.
    This does NOT deliver the social features below: there is still no shared
    server, so friends/sharing would need its own layer.
+   **Read before designing it:** the sibling `cannabis-tracker` PWA
+   (`C:\Users\clark\Sessions App\cannabis-tracker`) already runs this exact
+   pattern and its CLAUDE.md documents its sync rules and incident list. Four
+   traps it hit, which this app would repeat as written today:
+   - **Deletes resurrect.** "Nothing deleted" cuts both ways. `importAll()` is
+     a union merge and `deleteSet` / `deleteWorkout` leave no tombstone, so a
+     set deleted on the phone comes back the next time the desktop's snapshot
+     is merged, and is then pushed to Drive again. Every record already has a
+     UUID, which is half the fix. Still needed: `deletedAt` tombstones,
+     `updatedAt`, and ETag / `If-Match` on the Drive write.
+   - **An older copy can overwrite a newer edit.** `importAll()` does an
+     unconditional `put` per id, so whichever snapshot is merged last wins,
+     not whichever is newest. An edited set can be silently reverted. Same
+     `updatedAt` fix. This one bears directly on "a logged set must persist
+     exactly as entered".
+   - **Namespace storage per account.** Global keys there let a second Google
+     account inherit the first's file id and cached data, and the merge then
+     copied one person's history into the other's file.
+   - **Surface sync failure loudly.** A dead token silently stopped syncing
+     there for about two days and real sessions were lost. Any non-2xx must
+     throw; never mark synced on the optimistic path.
+   (Their fourth incident, stats computed across people, only applies here if
+   a combined-stats feature is ever built.)
 3. **Insights v2** once real data accrues — per-exercise history charts and
    week-over-week volume shipped in v0.9. Still open: progressive-overload
    flags and RPE trends for unloadable work. Same science rules: evidence or
