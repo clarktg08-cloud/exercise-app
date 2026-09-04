@@ -1,0 +1,244 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EXIF orientation test</title>
+<!--
+  Covers the one code path in downscaleImage that real phone photos hit and
+  that no test image had exercised: EXIF orientation.
+
+  A phone records rotation as a tag rather than rotating the pixels. The app
+  passes imageOrientation:'from-image' so the browser bakes that rotation in,
+  and the rotated result is what gets stored — permanently. A photo saved
+  sideways stays sideways, so this has to be right at save time.
+
+  This runs in a BROWSER, not node, on purpose: whether imageOrientation is
+  honoured is a per-engine question, and the answer that matters is the one
+  from the browser Taylor actually uses. Open it on the phone.
+
+  WHAT THIS TEST DOES AND DOESN'T PROVE. It asserts the OUTCOME — a tagged
+  photo is saved upright, with oriented dimensions — not that any particular
+  line of downscaleImage causes it. On Chromium 141 the engine applies EXIF
+  regardless of the imageOrientation argument, so deleting that argument still
+  passes here; verified by mutation on 2026-09-04. What it does catch, also
+  verified by mutation: wrong canvas dimensions, and pixels drawn mirrored or
+  rotated with the dimensions still right (both scored 0/9). On an engine that
+  defaults to 'none', dropping the argument fails this test outright.
+
+  No build step, no dependencies — same rules as the app.
+-->
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 16px; max-width: 900px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  #summary { font-size: 16px; font-weight: 600; padding: 8px 12px; border-radius: 6px; margin: 12px 0; }
+  .pass { background: #d7f5dd; color: #10381a; }
+  .fail { background: #ffd9d9; color: #4a1010; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: middle; }
+  th { font-weight: 600; }
+  td.v { font-variant-numeric: tabular-nums; }
+  .ok { color: #137333; font-weight: 600; }
+  .no { color: #c5221f; font-weight: 600; }
+  canvas { border: 1px solid #bbb; image-rendering: pixelated; height: 40px; }
+  .note { color: #555; font-size: 13px; }
+  code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; }
+</style>
+
+<h1>EXIF orientation — <code>downscaleImage()</code></h1>
+<p class="note">
+  Each case builds a JPEG whose stored pixels are deliberately wrong, tags it
+  with the EXIF orientation that says how to fix them, and asserts the saved
+  output comes back upright. Expected result in every case: a landscape image,
+  red top-left, green top-right, blue bottom-left, yellow bottom-right.
+</p>
+<div id="summary">running…</div>
+<table>
+  <thead>
+    <tr><th>Case</th><th>Stored</th><th>Expected</th><th>Got</th><th>Corners</th><th>Result</th><th>Output</th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<p class="note" id="ua"></p>
+
+<script type="module">
+import { downscaleImage } from '../js/images.js';
+
+// The canonical, correctly-oriented image: landscape, with four quadrants that
+// are distinguishable after JPEG loss. Non-square so that a transposed result
+// (orientations 5-8) is caught by the dimensions alone.
+const W = 120, H = 80;
+const RED = [255, 0, 0], GREEN = [0, 255, 0], BLUE = [0, 0, 255], YELLOW = [255, 255, 0];
+const NAMES = new Map([[RED, 'red'], [GREEN, 'green'], [BLUE, 'blue'], [YELLOW, 'yellow']]);
+
+function canonicalAt(x, y) {
+  const left = x < W / 2, top = y < H / 2;
+  return top ? (left ? RED : GREEN) : (left ? BLUE : YELLOW);
+}
+
+// EXIF orientation says how to map STORED pixels to DISPLAYED ones. Values
+// 5-8 transpose the image, so stored dimensions are swapped for those.
+// Ref: EXIF 2.3, tag 0x0112.
+const FORWARD = {
+  1: (sx, sy, sw, sh) => [sx, sy],                     // as stored
+  2: (sx, sy, sw, sh) => [sw - 1 - sx, sy],            // mirrored
+  3: (sx, sy, sw, sh) => [sw - 1 - sx, sh - 1 - sy],   // 180
+  4: (sx, sy, sw, sh) => [sx, sh - 1 - sy],            // flipped
+  5: (sx, sy, sw, sh) => [sy, sx],                     // transposed
+  6: (sx, sy, sw, sh) => [sh - 1 - sy, sx],            // 90 CW
+  7: (sx, sy, sw, sh) => [sh - 1 - sy, sw - 1 - sx],   // transverse
+  8: (sx, sy, sw, sh) => [sy, sw - 1 - sx],            // 90 CCW
+};
+const transposes = (o) => o >= 5 && o <= 8;
+
+// Build the stored pixels by inverting the transform: whatever the browser is
+// about to do to this image, the result must be the canonical one.
+function storedCanvas(orientation) {
+  const [sw, sh] = transposes(orientation) ? [H, W] : [W, H];
+  const c = document.createElement('canvas');
+  c.width = sw; c.height = sh;
+  const img = c.getContext('2d').createImageData(sw, sh);
+  // null is the untagged case: pixels are already canonical, so no transform.
+  const f = FORWARD[orientation] ?? FORWARD[1];
+  for (let sy = 0; sy < sh; sy++) {
+    for (let sx = 0; sx < sw; sx++) {
+      const [dx, dy] = f(sx, sy, sw, sh);
+      const [r, g, b] = canonicalAt(dx, dy);
+      const i = (sy * sw + sx) * 4;
+      img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+    }
+  }
+  c.getContext('2d').putImageData(img, 0, 0);
+  return c;
+}
+
+// Splice a minimal APP1/EXIF block carrying just the Orientation tag in after
+// the SOI marker. Writing one by hand keeps this dependency-free, and it is
+// only 26 bytes of TIFF: header, one IFD entry, null next-IFD pointer.
+function withExifOrientation(bytes, orientation) {
+  const tiff = new Uint8Array(26);
+  const dv = new DataView(tiff.buffer);
+  tiff[0] = 0x49; tiff[1] = 0x49;         // "II" — little-endian
+  dv.setUint16(2, 42, true);              // magic
+  dv.setUint32(4, 8, true);               // IFD0 starts at byte 8
+  dv.setUint16(8, 1, true);               // one entry
+  dv.setUint16(10, 0x0112, true);         // tag: Orientation
+  dv.setUint16(12, 3, true);              // type: SHORT
+  dv.setUint32(14, 1, true);              // count: 1
+  dv.setUint16(18, orientation, true);    // value, inline in the 4-byte field
+  dv.setUint32(22, 0, true);              // no next IFD
+  const out = new Uint8Array(bytes.length + 36);
+  out.set(bytes.subarray(0, 2), 0);                          // SOI
+  out[2] = 0xFF; out[3] = 0xE1;                              // APP1
+  out[4] = 0; out[5] = 34;                                   // segment length
+  out.set([0x45, 0x78, 0x69, 0x66, 0, 0], 6);                // "Exif\0\0"
+  out.set(tiff, 12);
+  out.set(bytes.subarray(2), 38);
+  return out;
+}
+
+const toBytes = async (blob) => new Uint8Array(await blob.arrayBuffer());
+const toBlob = (canvas, q) => new Promise((res) => canvas.toBlob(res, 'image/jpeg', q));
+
+async function makeCase(orientation) {
+  // Encode at high quality so the quadrant edges stay clean; downscaleImage
+  // re-encodes at its own quality afterwards, which is what we want to test.
+  const jpeg = await toBytes(await toBlob(storedCanvas(orientation), 0.95));
+  const bytes = orientation === null ? jpeg : withExifOrientation(jpeg, orientation);
+  return new Blob([bytes], { type: 'image/jpeg' });
+}
+
+// Classify by nearest of the four known colours rather than exact match: the
+// image survives two JPEG round-trips, so the centre of a quadrant lands near
+// its colour, not on it.
+function nearest(r, g, b) {
+  let best = null, bestD = Infinity;
+  for (const c of [RED, GREEN, BLUE, YELLOW]) {
+    const d = (r - c[0]) ** 2 + (g - c[1]) ** 2 + (b - c[2]) ** 2;
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return NAMES.get(best);
+}
+
+async function cornersOf(blob, w, h) {
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(bmp, 0, 0);
+  bmp.close();
+  const ctx = c.getContext('2d');
+  // Sample the centre of each quadrant, well clear of the boundaries.
+  const at = (fx, fy) => {
+    const d = ctx.getImageData(Math.round(w * fx), Math.round(h * fy), 1, 1).data;
+    return nearest(d[0], d[1], d[2]);
+  };
+  return { canvas: c, corners: [at(0.25, 0.25), at(0.75, 0.25), at(0.25, 0.75), at(0.75, 0.75)] };
+}
+
+const EXPECTED = ['red', 'green', 'blue', 'yellow'];
+
+async function run() {
+  const cases = [null, 1, 2, 3, 4, 5, 6, 7, 8];
+  const results = [];
+  const rows = document.getElementById('rows');
+
+  for (const o of cases) {
+    const label = o === null ? 'no EXIF tag' : `orientation ${o}`;
+    const [sw, sh] = o !== null && transposes(o) ? [H, W] : [W, H];
+    let row = { case: label, stored: `${sw}×${sh}`, expected: `${W}×${H}`, got: '—', corners: '—', pass: false, error: null };
+    let canvas = null;
+    try {
+      const input = await makeCase(o);
+      const { blob, width, height } = await downscaleImage(input);
+
+      // The reported width/height must be the ORIENTED ones: a caller that
+      // trusted the raw JPEG header would store a portrait size for a
+      // landscape photo, and the thumbnail strip would lay it out wrong.
+      const dimsOk = width === W && height === H;
+      row.got = `${width}×${height}`;
+
+      const { canvas: c, corners } = await cornersOf(blob, width, height);
+      canvas = c;
+      row.corners = corners.join(' ');
+      const cornersOk = corners.every((v, i) => v === EXPECTED[i]);
+      row.pass = dimsOk && cornersOk;
+    } catch (err) {
+      row.error = String(err && err.message || err);
+      row.corners = row.error;
+    }
+    results.push(row);
+
+    const tr = document.createElement('tr');
+    for (const v of [row.case, row.stored, row.expected, row.got, row.corners]) {
+      const td = document.createElement('td');
+      td.className = 'v';
+      td.textContent = v;
+      tr.append(td);
+    }
+    const verdict = document.createElement('td');
+    verdict.className = row.pass ? 'ok' : 'no';
+    verdict.textContent = row.pass ? 'PASS' : 'FAIL';
+    tr.append(verdict);
+    const shot = document.createElement('td');
+    if (canvas) shot.append(canvas);
+    tr.append(shot);
+    rows.append(tr);
+  }
+
+  const passed = results.filter((r) => r.pass).length;
+  const el = document.getElementById('summary');
+  el.textContent = `${passed}/${results.length} passed`;
+  el.className = passed === results.length ? 'pass' : 'fail';
+  document.getElementById('ua').textContent = navigator.userAgent;
+
+  // Read by the headless runner; also handy from a phone's devtools.
+  window.__RESULTS__ = { passed, total: results.length, ua: navigator.userAgent, rows: results };
+  document.title = `${passed === results.length ? 'PASS' : 'FAIL'} ${passed}/${results.length} — EXIF orientation`;
+}
+
+run().catch((err) => {
+  const el = document.getElementById('summary');
+  el.textContent = `harness error: ${err.message}`;
+  el.className = 'fail';
+  window.__RESULTS__ = { passed: 0, total: 0, error: String(err) };
+  document.title = 'FAIL — EXIF orientation';
+});
+</script>

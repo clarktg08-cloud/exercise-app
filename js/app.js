@@ -10,6 +10,7 @@ import {
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
 import { APP_VERSION } from './version.js';
+import { downscaleImage } from './images.js';
 import { weekStart, weeklySetsPerMuscle, e1rmHistory } from './insights.js';
 
 const view = document.getElementById('view');
@@ -718,31 +719,8 @@ function renderExerciseNotes(wrap, ex) {
 }
 
 // ---------- Exercise photos ----------
-
-// A phone photo is 3-12MB. Stored raw, a few dozen would dwarf the training
-// history sharing this database and put it at real risk of eviction. Bounded
-// to PHOTO_MAX_PX on the long edge and re-encoded as JPEG, each one lands
-// around 100-200KB — still sharp enough to check a setup on a phone.
-const PHOTO_MAX_PX = 1000;
-const PHOTO_QUALITY = 0.8;
-
-async function downscaleImage(file) {
-  // imageOrientation is explicit: phone cameras record rotation in EXIF
-  // rather than rotating the pixels, and the default would store a sideways
-  // photo of a stretch that was shot upright.
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, PHOTO_MAX_PX / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
-  bitmap.close();
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', PHOTO_QUALITY));
-  if (!blob) throw new Error('could not encode image');
-  return { blob, width: w, height: h };
-}
+// downscaleImage lives in images.js so tests/orientation.html can import it
+// without booting the app.
 
 // Every object URL pins its blob in memory until revoked, so they are tracked
 // and released on each re-render. The viewer reuses the strip's URLs rather
