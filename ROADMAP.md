@@ -23,6 +23,29 @@ order and scope; this file just keeps sessions on the same page.
 - **v0.6** — calendar view for History: month grid marking training days, tap a
   day for its sessions (straight into the session when the day holds only one).
   Calendar / List toggle remembered per device.
+- **v0.7** — pre-migration safety snapshots (`backups` store, DB_VERSION 2),
+  restorable from History.
+- **v0.8** — form photos on exercises (`exerciseImages`, DB_VERSION 3),
+  downscaled to 1000px JPEG before storage.
+- **v0.9** — the gaps, not new features:
+  - **Durable storage requested at startup** (`navigator.storage.persist()`).
+    Without it IndexedDB is evictable under storage pressure, and Safari drops
+    it after about a week away — the one failure mode that loses everything.
+  - **Data-safety line on History**: whether storage is durable on this device,
+    how much it uses, and how long since this device last exported. Loud only
+    when a real gap exists.
+  - **"+ Same" on the Today cards** — one tap logs another set identical to the
+    last one of that exercise. RPE is deliberately not copied: it is a
+    judgement about the set you just finished, and copying it would store a
+    number nobody assessed.
+  - **`deleteWorkout`** — a session and its sets go together in one
+    transaction, behind a confirm on the session screen. Closes the
+    "mis-started sessions are permanent" gap below.
+  - **Editable muscle tags / per-side flag** on the log screen, with a
+    `tagsEdited` flag so `initDb`'s seed-sync stops putting the old tags back.
+  - **Insights v2 (part)**: this week vs your own last week per muscle, and the
+    est-1RM series drawn per exercise (the data `e1rmHistory` already
+    computed and the UI was discarding).
 
 ## Agreed next (order not final)
 
@@ -34,9 +57,10 @@ order and scope; this file just keeps sessions on the same page.
 2. **Cloud sync (Cloudflare D1)** — local-first stays; D1 becomes the shared
    source of truth across phone/desktop. Auth token in Cloudflare secrets,
    never in the repo. Export/import (done) is the manual fallback.
-3. **Insights v2** once real data accrues — per-exercise history charts,
-   progressive-overload flags, RPE trends for unloadable work. Same science
-   rules: evidence or it doesn't ship.
+3. **Insights v2** once real data accrues — per-exercise history charts and
+   week-over-week volume shipped in v0.9. Still open: progressive-overload
+   flags and RPE trends for unloadable work. Same science rules: evidence or
+   it doesn't ship.
 
 ## Decided (2026-08-20) — intensity, warm-ups, bands
 
@@ -58,14 +82,16 @@ order and scope; this file just keeps sessions on the same page.
 
 ## Agreed next — after v0.6.0
 
-- **No way to delete a session.** `deleteSet` exists; there is no
-  `deleteWorkout`. So anything imported or mis-started is permanent short of
-  wiping site data, which would take real history with it. This is why Taylor
-  decided (2026-08-20) NOT to import test data to see the calendar populated —
-  fake sessions would be unremovable and would feed the weekly set counts and
-  est-1RM trend as though they were real training.
-- **Editing an exercise's muscle tags / per-side flag** — there is no UI for
-  it, so a mis-tagged custom exercise cannot be fixed in the app.
+- ~~**No way to delete a session.**~~ **DONE in v0.9** — `deleteWorkout`
+  removes a session and its sets in one transaction, from a confirmed control
+  at the bottom of the session screen. It is NOT covered by the safety
+  snapshot, and the confirm says so. Test data can now be imported and removed
+  again, which was the blocker on seeing the calendar populated.
+- ~~**Editing an exercise's muscle tags / per-side flag**~~ **DONE in v0.9** —
+  editable from the log screen. Note the subtlety it exposed: `initDb`'s
+  seed-sync rewrites `muscles` on every startup for non-custom exercises, so a
+  correction to a seeded exercise would have silently undone itself. The
+  `tagsEdited` flag is what stops that; don't remove it.
 - **Weight stepper passes through 0 on the way back to "—"**, so bodyweight
   work can end up logged as `0 lb` (Taylor did this on Push-Ups). Decide
   whether unloaded exercises should skip 0 entirely.

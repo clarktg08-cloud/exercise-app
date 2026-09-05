@@ -6,6 +6,8 @@
 //                increment, isCustom, createdAt, notes?, perSide?, restSec? }
 //   restSec: the user's own rest target for this exercise, in seconds. Absent
 //            means "use the suggested default from the reps just logged".
+//   tagsEdited: the user corrected this exercise's muscle tags by hand, so the
+//            seed-sync in initDb must leave `muscles` alone from then on.
 //   workouts:  { id, date 'YYYY-MM-DD', startedAt, endedAt|null, notes,
 //                plannedExerciseIds? (from "repeat workout"; logged sets are
 //                the source of truth — planned is just a to-do list) }
@@ -85,6 +87,38 @@ function getAll(store) {
   );
 }
 
+// --- durable storage ---
+//
+// By default IndexedDB is "best effort": the browser may evict it under
+// storage pressure, and Safari discards it after roughly seven days without a
+// visit. Everything Taylor has ever logged lives in there with no server copy,
+// so ask for durable storage on every start. The answer can change over time
+// (installing the PWA can flip a silent denial into a grant), the call is a
+// cheap no-op once granted, and a refusal is not an error — it just means the
+// export in History is the only safety net.
+export async function requestPersistence() {
+  if (!navigator.storage?.persist) return null;
+  try {
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return null;
+  }
+}
+
+// { usage, quota, persisted } or null where the browser doesn't report it.
+export async function storageStatus() {
+  if (!navigator.storage?.estimate) return null;
+  try {
+    const est = await navigator.storage.estimate();
+    const persisted = navigator.storage.persisted
+      ? await navigator.storage.persisted() : null;
+    return { usage: est.usage ?? null, quota: est.quota ?? null, persisted };
+  } catch {
+    return null;
+  }
+}
+
 export async function initDb() {
   const db = await openDb();
   const existing = await getAll('exercises');
@@ -112,12 +146,18 @@ export async function initDb() {
         // Deliberately separate from the sync below: it fires only when the
         // field is absent, so a later edit to perSide is never clobbered.
         store.put({ ...cur, perSide: e.perSide === true });
-      } else if (!cur.isCustom &&
-                 (cur.load !== e.load ||
-                  cur.muscles.join() !== e.muscles.join() ||
-                  cur.increment !== (e.increment ?? 2.5))) {
-        store.put({ ...cur, load: e.load, muscles: e.muscles,
-                    increment: e.increment ?? 2.5 });
+      } else if (!cur.isCustom) {
+        // A user's own correction to the muscle tags has to survive this sync,
+        // or fixing a mis-tagged seed exercise would silently undo itself on
+        // the next load. `tagsEdited` marks that; load and increment still
+        // follow the seed definition either way.
+        const muscles = cur.tagsEdited ? cur.muscles : e.muscles;
+        const increment = e.increment ?? 2.5;
+        if (cur.load !== e.load ||
+            cur.muscles.join() !== muscles.join() ||
+            cur.increment !== increment) {
+          store.put({ ...cur, load: e.load, muscles, increment });
+        }
       }
     }
     return store.count();
@@ -452,6 +492,27 @@ export async function updateSet(set) {
 export async function deleteSet(id) {
   const db = await openDb();
   await tx(db, 'sets', 'readwrite', (s) => s.delete(id));
+}
+
+// Delete a session and every set in it, in ONE transaction. Sets are keyed by
+// workoutId, so removing the workout alone would leave orphans that still feed
+// weekly volume and est-1RM while being invisible and unreachable in the UI.
+// One transaction means it cannot half-happen. Returns how many sets went.
+// This is the only destructive operation in the app that is not a single set —
+// callers must confirm first, and it is deliberately absent from any bulk path.
+export async function deleteWorkout(id) {
+  const db = await openDb();
+  const sets = await setsForWorkout(id);
+  await new Promise((resolve, reject) => {
+    const t = db.transaction(['workouts', 'sets'], 'readwrite');
+    t.objectStore('workouts').delete(id);
+    const setStore = t.objectStore('sets');
+    for (const s of sets) setStore.delete(s.id);
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+  return sets.length;
 }
 
 export async function setsForWorkout(workoutId) {

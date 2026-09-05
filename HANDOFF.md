@@ -1,8 +1,56 @@
-# Session handoff — 2026-08-20
+# Session handoff — 2026-09-05
 
 For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
 first; this file is just the current state between them.
+
+## v0.9.0 — NOT YET DEPLOYED
+
+Built on branch `claude/app-improvement-ideas-45chb8`, **not on `master`**, so
+the live site is still on the previous version. `APP_VERSION` is 0.9.0 and
+`sw.js` `CACHE_VERSION` is v17, both staged and waiting for Taylor's go.
+
+What changed, and the reasoning that is not obvious from the diff:
+
+- **`requestPersistence()` runs after the first render.** IndexedDB is
+  "best effort" by default; a browser may evict it, and Safari discards it
+  after roughly seven days without a visit. This was the single largest
+  unguarded risk to the training history and it cost one call. A refusal is
+  not an error — it just means the export is the only safety net, which the
+  new data-safety line on History now says out loud.
+- **`repeatLastSet()` never copies RPE.** Everything measurable is copied
+  exactly (reps, weight including a real 0 and a null for no load, duration,
+  side), but RPE is a judgement about the set you just finished. Copying it
+  forward would store a number nobody assessed, which CLAUDE.md forbids.
+  If a future session "fixes" this by carrying RPE over, that is a regression.
+- **`deleteWorkout()` deletes the workout and its sets in ONE transaction.**
+  Deleting the workout alone would leave orphan sets that still feed weekly
+  volume and est-1RM while being invisible and unreachable. It is deliberately
+  the only bulk delete in the app, and is NOT covered by the safety snapshot.
+- **`tagsEdited` exists because of a landmine.** `initDb`'s seed-sync rewrites
+  `muscles` on every startup for any non-custom exercise whose tags differ
+  from the seed. Without the flag, correcting a mis-tagged seeded exercise
+  would have silently reverted on the next load — the fix would have looked
+  like it worked, then quietly undone itself. Don't drop the flag.
+- **Insights**: weekly card now compares against the user's own previous week
+  (measured data on both sides, no threshold invented), and the est-1RM series
+  is drawn per exercise. The sparkline spaces points **by session, not by
+  date**, so it shows the shape of the progression and not a rate — the label
+  under it carries the real dates for exactly that reason.
+
+**Tests:** `tests/e2e.mjs` drives the real app in Chromium (34 checks, all
+passing). It is dev-only, adds no package.json, and needs
+`npm i --no-save playwright` plus `npx serve -l 8123 .`. If the local
+Playwright and the installed browser revision disagree, set `CHROME_PATH`.
+It covers the shapes CLAUDE.md asks for: null weight, weight 0, one rep, a
+timed hold, and a custom name with an apostrophe.
+
+**Deliberately NOT done, because they are Taylor's calls:**
+- The stepper prefill still comes from the LAST set of the previous session
+  (the most fatigued one), so the default drifts down over time. Candidates
+  remain best set or first set. Untouched on purpose.
+- The weight stepper still passes through 0 on the way back to "—".
+- Calendar colour-coding: still needs a rule for what a colour would mean.
 
 ## Where things stand
 

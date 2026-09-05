@@ -2,11 +2,12 @@ import {
   initDb, listExercises, addExercise, updateExercise,
   todayKey, trainingDayKey, getWorkoutByDate, getActiveWorkout, workoutsForDay,
   startWorkout, updateWorkout, listWorkouts,
-  logSet, updateSet, deleteSet, setsForWorkout, lastSetForExercise,
+  logSet, updateSet, deleteSet, deleteWorkout, setsForWorkout, lastSetForExercise,
   lastSessionForExercise,
   recentExerciseIds, listSets, exportAll, importAll,
   listBackups, restoreBackup,
   addExerciseImage, imagesForExercise, deleteExerciseImage, imageStorageBytes,
+  requestPersistence, storageStatus,
 } from './db.js';
 import { MUSCLE_GROUPS } from './exercises.js';
 import { APP_VERSION } from './version.js';
@@ -133,6 +134,24 @@ function el(html) {
 
 // ---------- Today ----------
 
+// Another set exactly like the last one of this exercise in this session.
+// RPE is deliberately NOT carried over: it is a judgement about the set you
+// just finished, so copying it forward would store a number nobody assessed.
+// CLAUDE.md: null means "not recorded", never a guessed value. Everything
+// measurable — reps, weight (including a real 0, and null for no load),
+// duration, side — is copied exactly.
+async function repeatLastSet(ex, lastSet) {
+  return logSet({
+    workoutId: state.workout.id,
+    exerciseId: ex.id,
+    reps: lastSet.reps,
+    weight: lastSet.weight,
+    rpe: null,
+    durationSec: lastSet.durationSec,
+    side: lastSet.side,
+  });
+}
+
 async function renderToday() {
   const dayKey = trainingDayKey();
   headerTitle.textContent = 'Today';
@@ -186,14 +205,33 @@ async function renderToday() {
     const ex = byId[g.exerciseId];
     const card = el(`
       <div class="card workout-ex" data-exercise-id="${g.exerciseId}">
-        <div class="name"></div>
+        <div class="ex-head">
+          <div class="name"></div>
+        </div>
         <div class="sets"></div>
       </div>`);
     card.querySelector('.name').textContent = ex ? ex.name : '(deleted exercise)';
-    card.querySelector('.sets').textContent =
-      g.sets.map((s) => setDesc(s)).join('  ·  ');
+    const setsLine = card.querySelector('.sets');
+    setsLine.textContent = g.sets.map((s) => setDesc(s)).join('  ·  ');
     card.style.cursor = 'pointer';
     card.onclick = () => { if (ex) openLog(ex); };
+
+    // Straight sets are the common case, and repeating one currently costs
+    // three taps (card → Log set → Back). This makes it one, without leaving
+    // the screen. Only the sets line is rewritten afterwards: a full re-render
+    // would throw away the scroll position mid-workout.
+    if (ex) {
+      const again = el(`<button class="repeat-set" aria-label="log another identical set">+ Same</button>`);
+      again.onclick = async (e) => {
+        e.stopPropagation();
+        again.disabled = true;
+        const added = await repeatLastSet(ex, g.sets[g.sets.length - 1]);
+        g.sets.push(added);
+        setsLine.textContent = g.sets.map((x) => setDesc(x)).join('  ·  ');
+        again.disabled = false;
+      };
+      card.querySelector('.ex-head').append(again);
+    }
     view.append(card);
   }
 
@@ -490,6 +528,14 @@ async function renderLog() {
   view.append(notesWrap);
   renderExerciseNotes(notesWrap, ex);
 
+  // Muscle tags and the per-side flag, editable in place. Before this there
+  // was no way to fix a mis-tagged exercise from inside the app, and the tags
+  // are what the weekly sets-per-muscle count is built on — a wrong tag
+  // silently skewed the one metric the Insights tab leans on hardest.
+  const tagsWrap = el(`<div class="ex-tags"></div>`);
+  view.append(tagsWrap);
+  renderExerciseTags(tagsWrap, ex);
+
   // Form photos: same job as the note, in the medium that reads faster
   // mid-set. Not awaited — reading blobs must never hold up the log screen.
   const photosWrap = el(`<div class="ex-photos"></div>`);
@@ -716,6 +762,65 @@ function renderExerciseNotes(wrap, ex) {
     addBtn.onclick = startEditing;
     wrap.append(addBtn);
   }
+}
+
+function renderExerciseTags(wrap, ex) {
+  wrap.innerHTML = '';
+  const muscles = ex.muscles ?? [];
+
+  const startEditing = () => {
+    wrap.innerHTML = '';
+    const chosen = new Set(muscles);
+    let perSide = ex.perSide === true;
+
+    const grid = el(`<div class="chip-grid"></div>`);
+    for (const m of MUSCLE_GROUPS) {
+      const chip = el(`<button class="pick-chip"></button>`);
+      chip.textContent = m;
+      chip.classList.toggle('selected', chosen.has(m));
+      chip.onclick = () => {
+        if (chosen.has(m)) chosen.delete(m); else chosen.add(m);
+        chip.classList.toggle('selected', chosen.has(m));
+      };
+      grid.append(chip);
+    }
+
+    const sideRow = el(`<div class="chip-grid"></div>`);
+    const sideChip = el(`<button class="pick-chip">Trained one side at a time</button>`);
+    sideChip.classList.toggle('selected', perSide);
+    sideChip.onclick = () => {
+      perSide = !perSide;
+      sideChip.classList.toggle('selected', perSide);
+    };
+    sideRow.append(sideChip);
+
+    const save = el(`<button class="btn small">Save tags</button>`);
+    save.onclick = async () => {
+      // tagsEdited stops initDb's seed-sync putting the original tags back on
+      // the next load — without it, correcting a seeded exercise would undo
+      // itself silently. Past sets are untouched: `side` is stored per set, so
+      // flipping perSide never rewrites what an old set meant.
+      const updated = await updateExercise({
+        ...ex, muscles: [...chosen], perSide, tagsEdited: true,
+      });
+      state.exercise = updated;
+      // Full re-render: perSide decides whether the log screen shows the
+      // side chips at all, so the card above has to be rebuilt.
+      render();
+    };
+    const cancel = el(`<button class="btn small secondary" style="margin-left:6px">Cancel</button>`);
+    cancel.onclick = () => renderExerciseTags(wrap, ex);
+
+    wrap.append(el(`<div class="section-label">Muscle groups (tap all that apply)</div>`),
+      grid, sideRow, save, cancel);
+  };
+
+  const line = el(`<button class="tag-line"></button>`);
+  const shown = muscles.length ? muscles.join(' · ') : 'no muscle groups tagged';
+  line.textContent = `🏷 ${shown}${ex.perSide ? ' · per side' : ''}  ✎`;
+  line.title = 'Tap to edit muscle tags';
+  line.onclick = startEditing;
+  wrap.append(line);
 }
 
 // ---------- Exercise photos ----------
@@ -1101,7 +1206,12 @@ async function renderInsights() {
 
   // --- This week ---
   const monday = weekStart();
+  const prevMonday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7);
   const weekCounts = weeklySetsPerMuscle(sets, workoutsById, exercisesById, monday);
+  // Your own previous week is the one comparison that needs no threshold
+  // invented for it — it is measured data either side. It also answers the
+  // question the raw count cannot: is this week actually different?
+  const prevCounts = weeklySetsPerMuscle(sets, workoutsById, exercisesById, prevMonday);
   const weekLabel = monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   const weekCard = el(`
@@ -1117,17 +1227,30 @@ async function renderInsights() {
         bound rather than a like-for-like comparison. Strength can progress on less.</div>
     </div>`);
   const rows = weekCard.querySelector('.insight-rows');
-  const entries = Object.entries(weekCounts).sort((a, b) => b[1] - a[1]);
+  // Muscles trained in EITHER week, so one that has dropped to zero this week
+  // still shows up — a disappearance is the more useful signal, and listing
+  // only what was trained hides it completely.
+  const muscleKeys = [...new Set([...Object.keys(weekCounts), ...Object.keys(prevCounts)])];
+  const entries = muscleKeys
+    .map((m) => [m, weekCounts[m] ?? 0, prevCounts[m] ?? 0])
+    .sort((a, b) => b[1] - a[1] || b[2] - a[2] || a[0].localeCompare(b[0]));
+
   if (entries.length === 0) {
     rows.append(el(`<div class="insight-empty">No sets logged this week yet.</div>`));
   } else {
-    for (const [muscle, count] of entries) {
+    for (const [muscle, count, prev] of entries) {
       const row = el(`
         <div class="insight-row">
           <span class="k"></span><span class="v"></span>
         </div>`);
       row.querySelector('.k').textContent = muscle;
-      row.querySelector('.v').textContent = `${count} ${count === 1 ? 'set' : 'sets'}`;
+      const diff = count - prev;
+      const cmp = prev === 0 && count === 0 ? ''
+        : diff === 0 ? `  (same as last week)`
+        : `  (${diff > 0 ? '▲ +' : '▼ '}${diff} vs ${prev} last week)`;
+      row.querySelector('.v').textContent =
+        `${count} ${count === 1 ? 'set' : 'sets'}${cmp}`;
+      row.classList.toggle('dim', count === 0);
       rows.append(row);
     }
   }
@@ -1167,6 +1290,21 @@ async function renderInsights() {
       }
       row.querySelector('.v').textContent = `~${latest.e1rm} lb${delta}`;
       trendRows.append(row);
+
+      // The whole series was already being computed and thrown away. Drawn as
+      // one line per exercise: every point is a real session's best estimate,
+      // spaced evenly by session rather than by date — this shows the shape of
+      // the progression, not a rate of change, and the range below says so.
+      if (points.length >= 2) {
+        trendRows.append(sparkline(points));
+        const span = el(`<div class="spark-span"></div>`);
+        const first = points[0];
+        const total = latest.e1rm - first.e1rm;
+        span.textContent =
+          `${fmtDate(first.date)} ~${first.e1rm} lb → ${fmtDate(latest.date)} ~${latest.e1rm} lb` +
+          `  (${total > 0 ? '+' : ''}${total} lb over ${plural(points.length, 'session')})`;
+        trendRows.append(span);
+      }
     }
   }
   view.append(trendCard);
@@ -1181,6 +1319,28 @@ async function renderInsights() {
       </div>
     </div>`);
   view.append(totalCard);
+}
+
+// A minimal line chart for an est-1RM series: no library, no axes, no
+// interpolation between sessions. Points are evenly spaced because the x axis
+// is "sessions in order", not time — pretending otherwise would imply a rate
+// the data does not support. A flat series still draws a flat line rather
+// than dividing by zero.
+function sparkline(points) {
+  const W = 260, H = 44, PAD = 4;
+  const vals = points.map((p) => p.e1rm);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min;
+  const x = (i) => PAD + (points.length === 1 ? 0
+    : (i * (W - PAD * 2)) / (points.length - 1));
+  const y = (v) => span === 0 ? H / 2
+    : H - PAD - ((v - min) * (H - PAD * 2)) / span;
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.e1rm).toFixed(1)}`).join(' ');
+  const dots = points.map((p, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(p.e1rm).toFixed(1)}" r="2"></circle>`).join('');
+  return el(`<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+      role="img" aria-label="estimated 1RM across ${points.length} sessions, ${min} to ${max} lb">
+      <path d="${d}" fill="none"></path>${dots}</svg>`);
 }
 
 // ---------- History ----------
@@ -1242,6 +1402,50 @@ async function appendBackupRow() {
   view.append(row);
 }
 
+// How the data on THIS device is protected right now. Two independent facts,
+// both otherwise invisible: whether the browser has agreed to keep the
+// database (without durable storage it can be evicted under storage pressure,
+// and Safari drops it after about a week away), and when this device last
+// produced an export. Neither is a judgement about training — they are the
+// state of the only two safety nets that exist before sync.
+const EXPORT_STALE_DAYS = 14;
+
+async function appendDataSafety() {
+  const workouts = await listWorkouts();
+  if (workouts.length === 0) return;
+
+  const row = el(`<div class="storage-note data-safety"></div>`);
+  const lines = [];
+
+  const last = Number(localStorage.getItem('lastExportAt')) || 0;
+  const days = last ? Math.floor((Date.now() - last) / 86400000) : null;
+  let stale = false;
+  if (!last) {
+    lines.push('Never exported from this device.');
+    stale = true;
+  } else {
+    const ago = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+    lines.push(`Last export from this device: ${ago}.`);
+    stale = days >= EXPORT_STALE_DAYS;
+  }
+
+  const st = await storageStatus();
+  if (st?.persisted === true) {
+    lines.push('Storage is marked durable, so the browser will not evict it to reclaim space.');
+  } else if (st?.persisted === false) {
+    lines.push('Storage is NOT marked durable — the browser may clear it to reclaim space. ' +
+      'Installing the app to the home screen usually earns durable storage.');
+    stale = true;
+  }
+  if (st?.usage) {
+    lines.push(`Using ${(st.usage / 1048576).toFixed(1)} MB of this browser's quota.`);
+  }
+
+  row.textContent = lines.join(' ');
+  row.classList.toggle('warn', stale);
+  view.append(row);
+}
+
 async function renderHistory() {
   headerTitle.textContent = 'History';
   headerDate.textContent = `v${APP_VERSION}`;
@@ -1258,6 +1462,10 @@ async function renderHistory() {
     a.download = `exercise-log-${todayKey()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+    // Per device, like historyView: it records what THIS browser has backed
+    // up, which is exactly the scope of the risk while there is no sync.
+    localStorage.setItem('lastExportAt', String(Date.now()));
+    render();
   };
   dataRow.append(exportBtn);
 
@@ -1303,6 +1511,7 @@ async function renderHistory() {
   }
 
   await appendBackupRow();
+  await appendDataSafety();
 
   const workouts = await listWorkouts();
   if (workouts.length === 0) {
@@ -1573,6 +1782,26 @@ async function renderWorkoutDetail() {
     });
     view.append(card);
   }
+
+  // Until now a session could only be added, never removed, so a mis-started
+  // or wrongly-imported one stayed in the weekly set counts and the est-1RM
+  // trend forever. Deliberately at the BOTTOM of the screen, behind a confirm
+  // that names exactly what goes, and it is the only bulk delete in the app.
+  const del = el(`<button class="btn danger" style="margin-top:18px">Delete this session</button>`);
+  del.onclick = async () => {
+    const what = sets.length === 0
+      ? 'this empty session'
+      : `this session and all ${plural(sets.length, 'set')} in it`;
+    if (!confirm(`Delete ${what}?\n\nThis cannot be undone and is not covered by ` +
+                 `the safety snapshot. Export first if you are unsure.`)) return;
+    await deleteWorkout(w.id);
+    state.detailWorkout = null;
+    // Back to wherever this screen was opened from; each of those re-reads the
+    // database, so a now-empty day or a deleted live session resolves itself.
+    state.screen = to;
+    render();
+  };
+  view.append(del);
 }
 
 // ---------- Shell ----------
@@ -1612,4 +1841,12 @@ document.querySelectorAll('.tab').forEach((tab) => {
   tab.onclick = () => switchTab(tab.dataset.tab);
 });
 
-initDb().then(render);
+// Ask for durable storage before the first paint's data work, not after: the
+// prompt (where a browser shows one) should land on a screen that is already
+// about this app's data, and the request is cheap. Never blocks startup — a
+// refusal only means the JSON export is the sole safety net, which is what the
+// History tab now says out loud.
+initDb().then(async () => {
+  render();
+  await requestPersistence();
+});
