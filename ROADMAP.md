@@ -27,7 +27,7 @@ order and scope; this file just keeps sessions on the same page.
   restorable from History.
 - **v0.8** — form photos on exercises (`exerciseImages`, DB_VERSION 3),
   downscaled to 1000px JPEG before storage.
-- **v0.9** — the gaps, not new features:
+- **v0.9** (deployed 2026-09-06) — the gaps, not new features:
   - **Durable storage requested at startup** (`navigator.storage.persist()`).
     Without it IndexedDB is evictable under storage pressure, and Safari drops
     it after about a week away — the one failure mode that loses everything.

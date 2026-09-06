@@ -4,11 +4,18 @@ For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
 first; this file is just the current state between them.
 
-## v0.9.0 — NOT YET DEPLOYED
+## v0.9.0 — DEPLOYED 2026-09-06
 
-Built on branch `claude/app-improvement-ideas-45chb8`, **not on `master`**, so
-the live site is still on the previous version. `APP_VERSION` is 0.9.0 and
-`sw.js` `CACHE_VERSION` is v17, both staged and waiting for Taylor's go.
+Taylor gave the go; `master` is at c611e66 and the Pages build succeeded at
+17:31 UTC. `APP_VERSION` is 0.9.0, `sw.js` `CACHE_VERSION` is v17.
+
+**Live-URL sampling was NOT done from the session that deployed it.** That
+container's network policy blocked `clarktg08-cloud.github.io` outright (403
+at the proxy on CONNECT), so the post-deploy check CLAUDE.md asks for is
+outstanding — the GitHub build status is all that was verified. Worth loading
+the site on the phone and the desktop and confirming the History tab reads
+v0.9.0 before trusting it. Note the commit message body still says "NOT
+deployed"; it was written before the go and is stale, not a second version.
 
 What changed, and the reasoning that is not obvious from the diff:
 
