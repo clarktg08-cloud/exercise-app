@@ -9,6 +9,14 @@ first; this file is just the current state between them.
 Taylor gave the go; `master` is at c611e66 and the Pages build succeeded at
 17:31 UTC. `APP_VERSION` is 0.9.0, `sw.js` `CACHE_VERSION` is v17.
 
+**v0.9.1 fixes a false alarm found on the phone within minutes of the v0.9.0
+deploy:** the data-safety line gated on `workouts.length`, but an empty
+session — started and walked away from — is a workout with no sets, so a
+device that had never logged anything got a red "Never exported from this
+device" warning about data it did not have. It gates on `listSets()` now. The
+lesson generalises: a warning that fires when nothing is at stake is a warning
+that gets ignored when something is.
+
 **Live-URL sampling was NOT done from the session that deployed it.** That
 container's network policy blocked `clarktg08-cloud.github.io` outright (403
 at the proxy on CONNECT), so the post-deploy check CLAUDE.md asks for is

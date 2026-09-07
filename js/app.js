@@ -1411,8 +1411,12 @@ async function appendBackupRow() {
 const EXPORT_STALE_DAYS = 14;
 
 async function appendDataSafety() {
-  const workouts = await listWorkouts();
-  if (workouts.length === 0) return;
+  // Gate on SETS, not workouts. An empty session — started and walked away
+  // from — is a workout with nothing in it, and warning that it is unbacked-up
+  // is a false alarm on a device that has never logged anything. A warning
+  // that cries wolf on day one is a warning nobody reads on day two.
+  const sets = await listSets();
+  if (sets.length === 0) return;
 
   const row = el(`<div class="storage-note data-safety"></div>`);
   const lines = [];
