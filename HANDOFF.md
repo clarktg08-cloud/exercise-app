@@ -4,10 +4,11 @@ For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
 first; this file is just the current state between them.
 
-## v0.9.0 — DEPLOYED 2026-09-06
+## v0.9.1 — DEPLOYED 2026-09-08 (current live version)
 
-Taylor gave the go; `master` is at c611e66 and the Pages build succeeded at
-17:31 UTC. `APP_VERSION` is 0.9.0, `sw.js` `CACHE_VERSION` is v17.
+`master` is at b740891. `APP_VERSION` is 0.9.1, `sw.js` `CACHE_VERSION` is
+v18. v0.9.0 (c611e66) deployed 2026-09-06 with a successful Pages build at
+17:31 UTC; v0.9.1 followed on 2026-09-08.
 
 **v0.9.1 fixes a false alarm found on the phone within minutes of the v0.9.0
 deploy:** the data-safety line gated on `workouts.length`, but an empty
@@ -17,13 +18,18 @@ device" warning about data it did not have. It gates on `listSets()` now. The
 lesson generalises: a warning that fires when nothing is at stake is a warning
 that gets ignored when something is.
 
-**Live-URL sampling was NOT done from the session that deployed it.** That
-container's network policy blocked `clarktg08-cloud.github.io` outright (403
-at the proxy on CONNECT), so the post-deploy check CLAUDE.md asks for is
-outstanding — the GitHub build status is all that was verified. Worth loading
-the site on the phone and the desktop and confirming the History tab reads
-v0.9.0 before trusting it. Note the commit message body still says "NOT
-deployed"; it was written before the go and is stale, not a second version.
+**Neither deploy was verified against the live URL from the deploying
+session.** That container's network policy blocked
+`clarktg08-cloud.github.io` outright (403 at the proxy on CONNECT), so the
+post-deploy sampling CLAUDE.md asks for never ran. v0.9.0 was confirmed live
+another way — Taylor sent a phone screenshot showing v0.9.0 in the header and
+"Storage is marked durable", which is also how the false alarm above was
+caught. **v0.9.1 has NOT been confirmed live at all**: the GitHub MCP server
+had dropped by then, so not even the Pages build status was checked. First
+job next session: load the site and confirm the History tab reads v0.9.1.
+
+Note the v0.9.0 commit message body still says "NOT deployed" — written
+before Taylor gave the go, stale rather than a second version.
 
 What changed, and the reasoning that is not obvious from the diff:
 
