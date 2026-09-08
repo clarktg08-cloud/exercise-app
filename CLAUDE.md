@@ -46,8 +46,14 @@ muscle group, progressive-overload checks) from clean set-level data.
 - Photos are downscaled to 1000px on the long edge and re-encoded as JPEG
   before storage (~100-200KB each). Never store a raw camera file: they run
   3-12MB and would put the training history at real risk of eviction.
-- Planned future: local-first with sync to Cloudflare D1. Google Drive is
-  backup/export only, never the live store.
+- Planned future: local-first with **automatic backup to each user's own
+  Google Drive** (decided 2026-09-08 — see ROADMAP "Agreed next" #2; this
+  REPLACES the earlier Cloudflare D1 plan). IndexedDB stays the live store:
+  logging a set must be instant and must work offline in a basement gym, so
+  Drive is backup/sync transport and never the thing a tap reads from. The
+  reason it beats D1 here: each person signs in with their own Google account,
+  so per-person separation is free, there are no accounts to build, and no
+  one else's training history ever lands on a server Taylor runs.
 - Schema changes must migrate existing data (bump `DB_VERSION`, write an
   upgrade path). Don't rename/repurpose object stores casually.
 

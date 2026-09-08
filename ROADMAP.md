@@ -54,9 +54,23 @@ order and scope; this file just keeps sessions on the same page.
    authenticated). Live at https://clarktg08-cloud.github.io/exercise-app/.
    Cloudflare Pages remains an option if a custom domain is ever wanted, but
    the origin change would strand existing data — export/import first.
-2. **Cloud sync (Cloudflare D1)** — local-first stays; D1 becomes the shared
-   source of truth across phone/desktop. Auth token in Cloudflare secrets,
-   never in the repo. Export/import (done) is the manual fallback.
+2. **Cloud backup to each user's own Google Drive** — decided 2026-09-08,
+   REPLACING the Cloudflare D1 plan. Local-first stays: IndexedDB is the live
+   store and logging never waits on a network. The app pushes a JSON snapshot
+   to a folder in the signed-in user's OWN Drive and pulls on load, reusing
+   the merge-by-id semantics `importAll()` already has (matching ids
+   overwritten, nothing deleted), so two devices cannot destroy each other's
+   sets. Export/import (done) stays as the manual fallback.
+   Why Drive over D1: each person authenticates with their own Google account,
+   so handing someone the link gives them isolated data with no accounts to
+   build and no server holding anyone's training history. The OAuth client ID
+   is public by design, so no secret enters the repo.
+   Blocked on Taylor: create the Google Cloud OAuth client and hand over the
+   client ID. Verify before promising frictionless sharing — current scope and
+   verification rules (`drive.file` vs `drive.appdata`), and note that while
+   the consent screen is unpublished only listed test users can sign in.
+   This does NOT deliver the social features below: there is still no shared
+   server, so friends/sharing would need its own layer.
 3. **Insights v2** once real data accrues — per-exercise history charts and
    week-over-week volume shipped in v0.9. Still open: progressive-overload
    flags and RPE trends for unloadable work. Same science rules: evidence or
@@ -122,4 +136,4 @@ order and scope; this file just keeps sessions on the same page.
 - **Garmin/Strava import** for combined training-load picture (Taylor is
   mostly a runner; that data lives there).
 - Body weight / measurements tracking.
-- Google Drive backup export (Drive is backup only, never the live store).
+- ~~Google Drive backup export~~ — promoted to "Agreed next" #2 on 2026-09-08.

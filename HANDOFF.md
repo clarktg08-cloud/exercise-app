@@ -1,4 +1,4 @@
-# Session handoff — 2026-09-05
+# Session handoff — 2026-09-08
 
 For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
@@ -24,12 +24,97 @@ session.** That container's network policy blocked
 post-deploy sampling CLAUDE.md asks for never ran. v0.9.0 was confirmed live
 another way — Taylor sent a phone screenshot showing v0.9.0 in the header and
 "Storage is marked durable", which is also how the false alarm above was
-caught. **v0.9.1 has NOT been confirmed live at all**: the GitHub MCP server
-had dropped by then, so not even the Pages build status was checked. First
-job next session: load the site and confirm the History tab reads v0.9.1.
+caught.
+
+**v0.9.1's Pages BUILD is now confirmed** (checked 2026-09-08 from the
+warning-explanation session): run 34178922636 for `b740891` completed
+`success` at 02:07:20 UTC, and run 34178969442 for the `41bbc6e` docs commit
+at 02:08:04 UTC. That closes the "not even the build was checked" gap.
+
+**It is still NOT confirmed as actually serving.** The same egress block hit
+this session too (`connect_rejected` on CONNECT to
+`clarktg08-cloud.github.io:443`), so the live URL has never been sampled from
+any container. A green Pages build is not an edge serving the new files —
+which is exactly the distinction the CLAUDE.md sampling rule exists to catch.
+
+**Loose thread worth chasing first:** every screenshot Taylor sent during the
+2026-09-08 warning-explanation session showed **v0.9.0** in the History
+header, and showed the pre-v0.9.1 banner behaviour (the red row rendering on
+a device with 0 sets — impossible under v0.9.1, which gates on `listSets()`).
+Those captures are stamped 9:53–10:03 in Taylor's local time; his UTC offset
+was never established, so whether they predate or postdate the 02:07 UTC
+build is genuinely unknown and should NOT be assumed either way. If they
+postdate it, his phone was still being served v0.9.0 and the question is
+edge lag vs. a stale service-worker cache. **First job next session:** get
+Taylor to reload History and read the version line. v0.9.1 = confirmed;
+v0.9.0 = a real staleness bug to chase, starting with `sw.js` (CACHE_VERSION
+is v18 and the fetch handler is network-first, so a stale phone means either
+the SW never updated or the edge is behind).
 
 Note the v0.9.0 commit message body still says "NOT deployed" — written
 before Taylor gave the go, stale rather than a second version.
+
+## Sync direction DECIDED 2026-09-08: Google Drive, not Cloudflare D1
+
+Taylor's two requirements, in his words: "not lose my saved data" and "give a
+link to someone else so they can use that also and our data isn't shared,
+it's per person." He pointed at his own smoking-tracker app, which creates a
+Google Drive folder on first run, and asked whether that pattern fits here.
+It does, and CLAUDE.md + ROADMAP have been rewritten accordingly — **do not
+build D1.**
+
+Why Drive wins for these two goals specifically:
+
+- **Per-person separation is free.** Each user signs in with their own Google
+  account and the file lands in their own Drive. No accounts to build, no
+  server, and Taylor never becomes custodian of a friend's training log. D1
+  would have meant building auth, sessions, and row-level ownership to reach
+  the same place.
+- **The OAuth client ID is public by design**, so the "no secrets in the
+  repo" rule survives intact.
+- **`importAll()`'s merge semantics are already the right shape** for it
+  (`js/db.js:595` — match by id, overwrite same-id, never delete), so two
+  devices syncing cannot destroy each other's sets.
+
+**The design rule that must hold: IndexedDB stays the LIVE store.** Drive gets
+snapshots. This is not caution for its own sake — the whole point of the app
+is logging a set in the fewest taps, and that has to work in a basement with
+no signal. Drive as the live store puts a network round-trip on every set
+write.
+
+Known costs, none of them dealbreakers but none of them hand-waved:
+
+- Google Cloud console setup is Taylor's to do (project, consent screen,
+  `https://clarktg08-cloud.github.io` as authorised origin). **Blocked on him
+  handing over the client ID.**
+- While the consent screen is unpublished, only listed test users can sign
+  in — so "share the link" is gated until it's published. Confirm current
+  scope/verification rules (`drive.file` vs `drive.appdata`) before promising
+  otherwise; this was flagged as unverified, not researched.
+- Conflict handling needs a real answer, since Taylor runs phone + desktop
+  concurrently.
+- His data leaves the device. Mild, and he accepted it knowingly.
+
+**Also established this session:** sharing the app *already* works with zero
+work. There is no `fetch()` anywhere in `js/`, no server, no accounts, and
+IndexedDB is per-origin/per-browser/per-device, so anyone handed the URL gets
+their own empty database today. No "Taylor" appears in the UI either (only in
+code comments). He can send the link now; Drive is about durability, not
+about making sharing possible.
+
+## Still open from the 2026-09-08 session (not fixed)
+
+- **Empty sessions render as normal training days on the calendar.** Tapping
+  "Start workout" writes the workout record immediately (`js/app.js:174` →
+  `startWorkout`, `js/db.js:442`), before any set exists. v0.9.1 stopped the
+  *data-safety banner* from firing on that state, but the calendar still
+  paints a filled "trained" cell for a day with 0 sets — Sept 6 is one. Fix
+  is either not persisting the workout until the first set lands, or styling
+  zero-set days differently. Taylor has not chosen; don't pick for him.
+- **The data-safety row styles the whole box red** when any one of its three
+  lines is a gap (`js/app.js`, `row.classList.toggle('warn', stale)`), so a
+  reassuring "storage is durable" sentence gets rendered in alarm red beside
+  the one real warning. Cosmetic, and much rarer since v0.9.1, but still wrong.
 
 What changed, and the reasoning that is not obvious from the diff:
 
