@@ -81,5 +81,8 @@ The "money math" here is **logging integrity and the science layer**:
 ## Private
 
 This is Taylor's personal training data. The app and repo have no secrets in
-them and must stay that way; when sync arrives, tokens go in Cloudflare
-secrets / env vars, never in the repo.
+them and must stay that way. When Drive sync arrives: the Google OAuth
+client ID is public by design and may live in the repo; each user's access
+token comes from their own sign-in, lives only in their browser, and is never
+committed. A browser OAuth flow needs no client secret — if a change ever
+seems to need one, stop and ask rather than committing it.

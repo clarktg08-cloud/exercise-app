@@ -262,4 +262,4 @@ timed hold, and a custom name with an apostrophe.
 - Once a remote exists (not yet): `git fetch` before editing — he runs
   concurrent sessions from multiple devices.
 - Model advice already given: routine iteration on Opus 5 + fast mode,
-  medium effort; raise effort for the D1 sync-layer design when it comes.
+  medium effort; raise effort for the Drive sync design when it comes.
