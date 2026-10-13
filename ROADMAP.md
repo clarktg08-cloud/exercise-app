@@ -94,6 +94,17 @@ order and scope; this file just keeps sessions on the same page.
      throw; never mark synced on the optimistic path.
    (Their fourth incident, stats computed across people, only applies here if
    a combined-stats feature is ever built.)
+   **Design input, 2026-10-13: the backup should be a file other tools can
+   read.** Taylor's training desk (the Fitness Assistant on his Health &
+   Fitness floor) already reads a nightly Garmin export for his runs. It has
+   no view of strength work at all, because that lives only in this app's
+   IndexedDB. A Drive snapshot written as an ordinary,
+   visible JSON file would close that gap for free. That argues for the
+   `drive.file` scope over `drive.appdata`: the app-data folder is hidden from
+   the user and from every other app, so nothing else could ever read it.
+   Open, and Taylor's to answer: which Google account he signs in with, since
+   that floor lives in a different Drive from his personal one, and whether
+   the file should land in that floor's folder or just be findable.
 3. **Insights v2** once real data accrues — per-exercise history charts and
    week-over-week volume shipped in v0.9. Still open: progressive-overload
    flags and RPE trends for unloadable work. Same science rules: evidence or
@@ -133,6 +144,19 @@ order and scope; this file just keeps sessions on the same page.
   work can end up logged as `0 lb` (Taylor did this on Push-Ups). Decide
   whether unloaded exercises should skip 0 entirely.
 
+## Raised 2026-10-13 — not yet agreed
+
+- **The library cannot tag forearm / wrist or trap work.** `MUSCLE_GROUPS`
+  has no group for either, so an exercise for them can only be mis-tagged or
+  left untagged. Taylor's own stretching routine lists nine areas: hip
+  flexors, hamstrings, triceps, upper traps, wrists, biceps, chest, back,
+  glutes. Four have a seeded stretch (hip flexor, hamstring, chest, glute).
+  Five do not: triceps, upper traps, wrists, biceps, back. Proposal: add
+  `forearms` and `traps` groups and seed the five missing stretches as
+  hold-type. Holds stay out of the weekly set math, so this changes the
+  picker and nothing in Insights. His call on the grouping; he had firm views
+  on how the hip was split.
+
 ## Parked ideas (discussed, not scheduled)
 
 - **Bands with rated tension.** Replace "no load + RPE" with the band's stated
@@ -157,6 +181,9 @@ order and scope; this file just keeps sessions on the same page.
     scores".
   - Accountability: streaks, "your buddy logged a workout" nudges.
 - **Garmin/Strava import** for combined training-load picture (Taylor is
-  mostly a runner; that data lives there).
+  mostly a runner; that data lives there). Note 2026-10-13: a nightly Garmin
+  export already lands as CSV on his Health & Fitness floor and his training
+  desk reads it. The cheaper route to a combined picture is getting strength
+  data OUT to that desk (see "Agreed next" #2), not pulling Garmin in here.
 - Body weight / measurements tracking.
 - ~~Google Drive backup export~~ — promoted to "Agreed next" #2 on 2026-09-08.

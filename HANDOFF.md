@@ -40,6 +40,14 @@ that had been outstanding since 2026-09-06 finally ran.
   seen). The original is kept on the local branch
   `backup/pre-rebase-2026-10-13`. Local `master` is now `origin/master` plus
   docs-only commits, unpushed.
+- **Taylor put this desk in charge of the app and its code (2026-10-13)** and
+  archived the "Warning explanation" session. At his invitation this desk
+  read the training desk's notes on his Health & Fitness floor. What that
+  means for the app is in ROADMAP: a design input under "Agreed next" #2, a
+  new "Raised 2026-10-13" section, and a note on the Garmin idea. His old
+  FitNotes backup was checked as an import source and is not one: it holds
+  10 sets from a single day. That floor's files are not this desk's to edit,
+  and CLAUDE.md "Private" now says what must not be copied from it.
 - Three `claude/*` branches on GitHub are leftovers from cloud sessions, each
   0 commits ahead of `master`. Nothing in them is unmerged. The "Warning
   explanation" cloud session reported on 2026-10-13 that it has no work off
