@@ -29,7 +29,10 @@ that had been outstanding since 2026-09-06 finally ran.
   `error`. Harmless today because a0c4a2e is docs-only and the live files are
   already identical. But the next push is the first real deploy since, so
   check that its Pages run actually completes, then sample the live URL; do
-  not assume. Re-running the stuck run is itself a deploy and needs his go.
+  not assume. **Re-running the stuck run does not work:** the cloud session
+  tried it at 07:10 UTC on 2026-10-13, with Taylor's go. GitHub accepted the
+  request and did nothing (still `queued`, still attempt 1, no new run, live
+  files unchanged). Don't retry it; a fresh push is what starts a new run.
 - **This PC's checkout had drifted: 7 commits behind, 1 ahead.** The one
   local commit was a docs wrap-up from 2026-08-31 that was never pushed. It
   has been rebased onto master; its still-true content is merged in below and
@@ -38,7 +41,9 @@ that had been outstanding since 2026-09-06 finally ran.
   `backup/pre-rebase-2026-10-13`. Local `master` is now `origin/master` plus
   docs-only commits, unpushed.
 - Three `claude/*` branches on GitHub are leftovers from cloud sessions, each
-  0 commits ahead of `master`. Nothing in them is unmerged.
+  0 commits ahead of `master`. Nothing in them is unmerged. The "Warning
+  explanation" cloud session reported on 2026-10-13 that it has no work off
+  GitHub and is ready to archive; its branch matches `master`.
 
 ## v0.9.1 — DEPLOYED 2026-09-08 (current live version)
 
