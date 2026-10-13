@@ -6,9 +6,13 @@ first; this file is just the current state between them.
 
 ## 2026-10-13 — desk takeover: what was checked, what is still open
 
-Written by the desktop session titled "Exercise App Coding". It is the one
-standing desk for this app; when its thread gets long Taylor opens a fresh
-session under the same name, and that session starts from these three files.
+Written by the desktop session titled "Exercise App Coding". It is the
+software developer for this app and nothing more: one desk on Taylor's Health
+& Fitness floor, alongside the Fitness, Medical and Grocery desks. Training
+advice is the Fitness desk's job, not this one's. When this thread gets long
+Taylor opens a fresh session under the same name, and that session starts
+from these three files plus its own desk doc, `Exercise App Coding — desk.md`
+in that floor's Project Docs folder (the path is in this desk's memory).
 Unlike the cloud sessions, the desktop can reach the live URL, so the check
 that had been outstanding since 2026-09-06 finally ran.
 
@@ -40,14 +44,14 @@ that had been outstanding since 2026-09-06 finally ran.
   seen). The original is kept on the local branch
   `backup/pre-rebase-2026-10-13`. Local `master` is now `origin/master` plus
   docs-only commits, unpushed.
-- **Taylor put this desk in charge of the app and its code (2026-10-13)** and
+- **Taylor put this desk in charge of the app's code (2026-10-13)** and
   archived the "Warning explanation" session. At his invitation this desk
-  read the training desk's notes on his Health & Fitness floor. What that
-  means for the app is in ROADMAP: a design input under "Agreed next" #2, a
-  new "Raised 2026-10-13" section, and a note on the Garmin idea. His old
-  FitNotes backup was checked as an import source and is not one: it holds
-  10 sets from a single day. That floor's files are not this desk's to edit,
-  and CLAUDE.md "Private" now says what must not be copied from it.
+  read the Fitness desk's notes. What they mean for the app is in ROADMAP: a
+  design input under "Agreed next" #2, a new "Raised 2026-10-13" section, and
+  a note on the Garmin idea. His old FitNotes backup was checked as an import
+  source and is not one: it holds 10 sets from a single day. Other desks'
+  files are read-only to this desk, and CLAUDE.md "Private" now says what
+  must not be copied from that floor into this public repo.
 - Three `claude/*` branches on GitHub are leftovers from cloud sessions, each
   0 commits ahead of `master`. Nothing in them is unmerged. The "Warning
   explanation" cloud session reported on 2026-10-13 that it has no work off

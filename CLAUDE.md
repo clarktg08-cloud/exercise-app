@@ -87,8 +87,9 @@ token comes from their own sign-in, lives only in their browser, and is never
 committed. A browser OAuth flow needs no client secret — if a change ever
 seems to need one, stop and ask rather than committing it.
 
-**This repo is public, and Taylor's health information is not.** Sessions
-here may read his Health & Fitness floor for context. Nothing about injuries,
+**This repo is public, and Taylor's health information is not.** The session
+that codes this app works on his Health & Fitness floor and reads the other
+desks' notes there for context. Nothing about injuries,
 clinicians, appointments or medical history goes into any file, comment,
 seed entry or commit message in this repo. Product conclusions can be
 written down; the personal reason behind them cannot.
