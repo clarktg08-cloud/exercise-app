@@ -1310,11 +1310,15 @@ async function renderInsights() {
   view.append(trendCard);
 
   // --- Totals ---
+  // A workout counts once it holds a set; an empty "Start workout" tap is not
+  // one (same rule as the History calendar and the export's emptyWorkoutIds).
+  const withSets = new Set(sets.map((s) => s.workoutId));
+  const trainedWorkouts = workouts.filter((w) => withSets.has(w.id)).length;
   const totalCard = el(`
     <div class="card">
       <div class="insight-title">All time</div>
       <div class="insight-rows">
-        <div class="insight-row"><span class="k">Workouts</span><span class="v">${workouts.length}</span></div>
+        <div class="insight-row"><span class="k">Workouts</span><span class="v">${trainedWorkouts}</span></div>
         <div class="insight-row"><span class="k">Sets logged</span><span class="v">${sets.length}</span></div>
       </div>
     </div>`);
@@ -1563,6 +1567,11 @@ async function appendHistoryList(workouts, byId) {
 // Month grid of training days. A day is marked from the session's DERIVED
 // training day (workout.date), not its clock date, so a 1:25am session marks
 // the night before — the same day it appears under everywhere else.
+// A session with zero sets is not training: "Start workout" writes the record
+// before any set exists, so a tap-and-walk-away would otherwise paint a filled
+// day. Those sessions are skipped here (and in the dots, the aria-label and the
+// month summary). They still appear in the List view as "No sets logged",
+// which is where they can be opened and deleted.
 async function appendCalendar(workouts) {
   const allSets = await listSets();
   const setCount = {};
@@ -1570,6 +1579,7 @@ async function appendCalendar(workouts) {
 
   const byDate = {};
   for (const w of workouts) {
+    if (!setCount[w.id]) continue;
     const d = (byDate[w.date] ??= { sessions: 0, sets: 0 });
     d.sessions++;
     d.sets += setCount[w.id] ?? 0;

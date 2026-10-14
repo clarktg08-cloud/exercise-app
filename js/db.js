@@ -27,6 +27,7 @@
 // before this field existed have side undefined and read as null.
 
 import { SEED_EXERCISES } from './exercises.js';
+import { APP_VERSION } from './version.js';
 
 const DB_NAME = 'exercise-app';
 const DB_VERSION = 3;
@@ -582,11 +583,31 @@ export function listSets() {
 
 // --- export / import ---
 
+// The export is also what other tools read (Taylor's training desk reads it to
+// see his strength work), so the top level says what it is before the lists:
+//   exportedAt     — when this snapshot was taken (ISO 8601)
+//   appVersion     — the APP_VERSION that wrote it, shown in the History tab
+//   version        — the IndexedDB schema version (DB_VERSION); kept under its
+//                    original name so older exports stay comparable
+//   emptyWorkoutIds — sessions with zero sets: "Start workout" tapped and
+//                    nothing logged. They are FLAGGED, not dropped: a backup
+//                    holds everything, and a restore must not lose a record.
+//                    A reader counting training days should skip these.
+// Every exercise carries its `muscles` tags. Nothing here is derived into the
+// record lists themselves, because importAll() writes those back verbatim.
 export async function exportAll() {
   const [exercises, workouts, sets] = await Promise.all([
     getAll('exercises'), getAll('workouts'), getAll('sets'),
   ]);
-  return { exportedAt: new Date().toISOString(), version: DB_VERSION, exercises, workouts, sets };
+  const withSets = new Set(sets.map((s) => s.workoutId));
+  const emptyWorkoutIds = workouts.filter((w) => !withSets.has(w.id)).map((w) => w.id);
+  return {
+    exportedAt: new Date().toISOString(),
+    appVersion: APP_VERSION,
+    version: DB_VERSION,
+    emptyWorkoutIds,
+    exercises, workouts, sets,
+  };
 }
 
 // Restore from an exportAll() JSON file. Merge semantics: records are matched

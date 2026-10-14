@@ -46,6 +46,10 @@ order and scope; this file just keeps sessions on the same page.
   - **Insights v2 (part)**: this week vs your own last week per muscle, and the
     est-1RM series drawn per exercise (the data `e1rmHistory` already
     computed and the UI was discarding).
+- **v0.9.2** (built 2026-10-14, not deployed yet) — the export says which app
+  version wrote it and lists empty sessions (`appVersion`,
+  `emptyWorkoutIds`); a session with zero sets no longer marks the calendar
+  or counts as a workout in Insights.
 
 ## Agreed next (order not final)
 
@@ -105,6 +109,16 @@ order and scope; this file just keeps sessions on the same page.
    Open, and Taylor's to answer: which Google account he signs in with, since
    that floor lives in a different Drive from his personal one, and whether
    the file should land in that floor's folder or just be findable.
+   **The training desk's file spec (its request, 2026-10-14; accepted):** one
+   file at a fixed path, `Training Data/exercise_app_backup.json`, overwritten
+   on every backup rather than a new dated file, so it always reads the same
+   path. Top level carries `exportedAt` and `appVersion`; exercises keep their
+   `muscles` tags; zero-set sessions are listed in `emptyWorkoutIds`. The
+   format half shipped in v0.9.2's `exportAll()`; the fixed path waits on the
+   backup itself. Note the consequence of one overwritten file: with phone
+   and desktop each holding their own database, whichever device backs up
+   last is what the file shows, until the sync design (traps above) merges
+   them.
 3. **Insights v2** once real data accrues — per-exercise history charts and
    week-over-week volume shipped in v0.9. Still open: progressive-overload
    flags and RPE trends for unloadable work. Same science rules: evidence or

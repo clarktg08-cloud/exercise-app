@@ -12,6 +12,7 @@
 // exercised in several shapes — a band set with null weight, a set at weight
 // 0, a single rep, a timed hold, and a custom exercise name with an apostrophe.
 
+import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:8123/';
@@ -227,8 +228,14 @@ const run = async () => {
   check('says it has never been exported', /Never exported/.test(await safety.innerText()));
   const dl = page.waitForEvent('download');
   await page.locator('button', { hasText: 'Export (JSON)' }).click();
-  await dl;
+  const exported = JSON.parse(await readFile(await (await dl).path(), 'utf8'));
   await page.waitForTimeout(200);
+  const appVersion = await page.evaluate(async () => (await import('./js/version.js')).APP_VERSION);
+  eq('export says which app version wrote it', exported.appVersion, appVersion);
+  check('export carries a timestamp', !Number.isNaN(Date.parse(exported.exportedAt)), exported.exportedAt);
+  check('export flags empty sessions as a list', Array.isArray(exported.emptyWorkoutIds));
+  check('every exported exercise keeps its muscle tags',
+    exported.exercises.every((e) => Array.isArray(e.muscles)));
   check('export recorded as today', /Last export from this device: today/.test(
     await page.locator('.data-safety').innerText()));
 
@@ -254,6 +261,81 @@ const run = async () => {
   check('other sessions untouched',
     after.sets.length === before.sets.length - doomed,
     `${before.sets.length} → ${after.sets.length}, expected -${doomed}`);
+
+  console.log('\nan empty session is not a training day');
+  // "Start workout" writes the workout before any set exists. Plant one with no
+  // sets on another day of this month, the way a tap-and-walk-away leaves it,
+  // plus one real one-set session today: the delete test above may have left
+  // no sets at all, and a calendar with nothing trained proves nothing.
+  const planted = await page.evaluate(async () => {
+    const { trainingDayKey } = await import('./js/db.js');
+    const now = Date.now();
+    const today = trainingDayKey(now);                 // the app's own day key (4am start)
+    const [y, m, d] = today.split('-').map(Number);
+    const day = d === 1 ? 2 : 1;
+    const emptyAt = new Date(y, m - 1, day, 12).getTime();
+    const emptyKey = trainingDayKey(emptyAt);
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('exercise-app');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const exerciseId = await new Promise((res, rej) => {
+      const r = db.transaction('exercises').objectStore('exercises').getAll();
+      r.onsuccess = () => res(r.result.find((e) => e.load === 'weighted').id);
+      r.onerror = () => rej(r.error);
+    });
+    await new Promise((res, rej) => {
+      const t = db.transaction(['workouts', 'sets'], 'readwrite');
+      t.objectStore('workouts').put({ id: 'e2e-empty-session', date: emptyKey, startedAt: emptyAt,
+        endedAt: null, notes: '', plannedExerciseIds: [] });
+      t.objectStore('workouts').put({ id: 'e2e-real-session', date: today, startedAt: now - 60000,
+        endedAt: null, notes: '', plannedExerciseIds: [] });
+      t.objectStore('sets').put({ id: 'e2e-real-set', workoutId: 'e2e-real-session', exerciseId,
+        reps: 5, weight: 100, rpe: null, durationSec: null, side: null, loggedAt: now - 60000 });
+      t.oncomplete = res;
+      t.onerror = () => rej(t.error);
+    });
+    db.close();
+    return { day, emptyKey, today };
+  });
+  await page.reload();
+  await page.waitForTimeout(400);
+  await page.locator('.tab[data-tab="history"]').click();
+  await page.locator('.seg-btn', { hasText: 'Calendar' }).click();
+  await page.locator('.cal-grid').waitFor();
+  const cells = await page.locator('.cal-day:not(.blank)').evaluateAll((els) => els.map((c) => ({
+    num: c.querySelector('.num').textContent,
+    tag: c.tagName,
+    trained: c.classList.contains('trained'),
+    bg: getComputedStyle(c).backgroundColor,
+  })));
+  const emptyCell = cells.find((c) => c.num === String(planted.day));
+  const plainCell = cells.find((c) => !c.trained && c.num !== String(planted.day));
+  const trainedCell = cells.find((c) => c.num === String(Number(planted.today.slice(8))));
+  check('today, with a real set, is marked trained', trainedCell?.trained, JSON.stringify(trainedCell));
+  check('the empty day is not marked trained', emptyCell && !emptyCell.trained, JSON.stringify(emptyCell));
+  check('the empty day is not a tappable cell', emptyCell && emptyCell.tag === 'DIV', emptyCell?.tag);
+  check('the empty day looks like an untrained day',
+    emptyCell && plainCell && emptyCell.bg === plainCell.bg, `${emptyCell?.bg} vs ${plainCell?.bg}`);
+  check('a day with real sets still looks trained',
+    trainedCell && trainedCell.bg !== plainCell?.bg, `${trainedCell?.bg} vs ${plainCell?.bg}`);
+  await page.locator('.seg-btn', { hasText: 'List' }).click();
+  check('the empty session is still reachable in the list',
+    await isVisible(page.locator('.history-item', { hasText: 'No sets logged' }).first()));
+  const exp2 = await page.evaluate(async () => (await import('./js/db.js')).exportAll());
+  check('export flags the empty session', exp2.emptyWorkoutIds.includes('e2e-empty-session'),
+    JSON.stringify(exp2.emptyWorkoutIds));
+  check('export still contains it — flagged, not dropped',
+    exp2.workouts.some((w) => w.id === 'e2e-empty-session'));
+  check('no session with sets is flagged empty',
+    exp2.emptyWorkoutIds.every((id) => !exp2.sets.some((s) => s.workoutId === id)));
+  await page.locator('.tab[data-tab="insights"]').click();
+  await page.locator('.insight-title', { hasText: 'All time' }).waitFor();
+  const shown = Number(await page.locator('.insight-row', { hasText: 'Workouts' }).locator('.v').innerText());
+  const withSets = new Set(exp2.sets.map((s) => s.workoutId));
+  eq('All-time workouts counts only sessions with sets', shown,
+    exp2.workouts.filter((w) => withSets.has(w.id)).length);
 
   await browser.close();
   console.log(failures === 0 ? '\nAll checks passed.' : `\n${failures} check(s) FAILED.`);

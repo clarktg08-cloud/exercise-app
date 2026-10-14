@@ -4,6 +4,44 @@ For the next Claude session in this folder (likely remote-controlled from
 Taylor's phone at the gym). Read CLAUDE.md (rules) and ROADMAP.md (plan)
 first; this file is just the current state between them.
 
+## v0.9.2 — built 2026-10-14, committed locally, NOT deployed
+
+Answers the first two requests Taylor's training desk (Fitness Assistant) left
+for this desk, plus the open empty-session bug they share a cause with.
+`APP_VERSION` 0.9.2, `sw.js` `CACHE_VERSION` v19.
+
+- **Export format, for readers other than this app.** `exportAll()` now puts
+  `appVersion` (the APP_VERSION that wrote it) and `emptyWorkoutIds` at the
+  top level, beside the existing `exportedAt` and `version` (which is the DB
+  schema version and keeps its old name so older exports stay comparable).
+  Exercises already carried their `muscles` tags. `importAll()` reads only the
+  three lists, so the new keys can't leak into the database on a restore.
+- **Empty sessions are flagged, never dropped.** A backup holds everything and
+  a restore must not lose a record, so a zero-set session stays in `workouts`
+  and is listed in `emptyWorkoutIds` for readers to skip. Do not "simplify"
+  this by filtering them out of the export.
+- **Empty sessions no longer paint the calendar** (the bug open since
+  2026-09-08). Picked by this desk under the floor rule "least ongoing effort:
+  the desk picks, Taylor corrects": display-only, because deferring the
+  workout's creation until the first set would touch the logging path, which
+  is the one place a mistake loses data. A day whose sessions all have zero
+  sets is a plain, untappable cell; dots, labels and the month summary count
+  only sessions with sets. The empty session still shows in the List view as
+  "No sets logged", which is where it can be opened and deleted.
+- **Insights "All time → Workouts" counts only sessions with sets**, by the
+  same rule.
+- **Tests:** `tests/e2e.mjs` gained an export check (app version, timestamp,
+  `emptyWorkoutIds`, muscle tags) and a section that plants an empty session
+  and a real one, then asserts with computed style that only the real day
+  looks trained, that the empty one is still in the list, flagged in the
+  export but not dropped, and not counted in Insights. Full run 2026-10-14:
+  46 checks, all passing (Playwright 1.64 with
+  `CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"`).
+
+**Deploy needs Taylor's go.** The docs-only commits below go out with it.
+After the push: confirm the Pages run actually completes (the last one never
+did; see below), then sample the live URL for 0.9.2 / v19.
+
 ## 2026-10-13 — desk takeover: what was checked, what is still open
 
 Written by the desktop session titled "Exercise App Coding". It is the
@@ -164,6 +202,8 @@ about making sharing possible.
   paints a filled "trained" cell for a day with 0 sets — Sept 6 is one. Fix
   is either not persisting the workout until the first set lands, or styling
   zero-set days differently. Taylor has not chosen; don't pick for him.
+  **Update 2026-10-14: fixed in v0.9.2 (display-only), picked by the desk
+  under the floor's "desk picks, Taylor corrects" rule. See the top.**
 - **The data-safety row styles the whole box red** when any one of its three
   lines is a gap (`js/app.js`, `row.classList.toggle('warn', stale)`), so a
   reassuring "storage is durable" sentence gets rendered in alarm red beside
